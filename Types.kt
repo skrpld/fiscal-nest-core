@@ -1,11 +1,17 @@
 package budget
 
+import java.time.LocalDate
+
 data class BudgetResult(
     val fillPct: Double,
     val cushionTopup: Double,
     val piggyActual: Double,
     val moneyRemaining: Double,
     val message: String,
+    val crisisType: String?,
+    val isOverspending: Boolean,
+    val cushionCurrent: Double,
+    val cushionTarget: Double,
 )
 
 data class TimeBudgetResult(
@@ -14,9 +20,9 @@ data class TimeBudgetResult(
     val piggyActual: Double,
     val moneyRemaining: Double,
     val message: String,
-    val periodStart: String,
-    val periodEnd: String,
-    val currentDate: String,
+    val periodStart: LocalDate,
+    val periodEnd: LocalDate,
+    val currentDate: LocalDate,
     val daysInPeriod: Int,
     val daysElapsed: Int,
     val daysRemaining: Int,
@@ -31,4 +37,8 @@ data class TimeBudgetResult(
     val alreadySpentTotal: Double,
     val burnRate: Double,
     val messageTime: String,
+    val crisisType: String?,
+    val isOverspending: Boolean,
+    val cushionCurrent: Double,
+    val cushionTarget: Double,
 )

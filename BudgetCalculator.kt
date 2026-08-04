@@ -29,6 +29,10 @@ object BudgetCalculator {
             piggyActual = DecimalUtils.quantizeMoney(result.piggyActual).toDouble(),
             moneyRemaining = DecimalUtils.quantizeMoney(result.remaining).toDouble(),
             message = message,
+            crisisType = result.crisisType,
+            isOverspending = result.crisisType == "overspending",
+            cushionCurrent = DecimalUtils.quantizeMoney(ctx.cushionCurrent).toDouble(),
+            cushionTarget = DecimalUtils.quantizeMoney(ctx.cushionTarget).toDouble(),
         )
     }
 
@@ -37,18 +41,17 @@ object BudgetCalculator {
         income: BudgetInput? = null,
         expensesMandatory: BudgetInput? = null,
         expensesOptional: BudgetInput? = null,
-        piggyPlanned: BudgetInput = BudgetInput.Single(0),
+        piggyPlanned: BudgetInput = BudgetInput.of(0),
         cushionCurrent: Number = 0,
         cushionTarget: Number = 0,
         incomeSchedule: List<IncomeEvent>? = null,
-        expensesMandatorySchedule: List<ExpenseEvent>? = null,
-        expensesOptionalSchedule: List<ExpenseEvent>? = null,
-        periodStart: LocalDate? = null,
-        currentDate: LocalDate? = null,
-        alreadySpent: BudgetInput = BudgetInput.Single(0),
+        expensesSchedule: List<ExpenseEvent>? = null,
+        periodStart: LocalDate,
+        currentDate: LocalDate,
+        alreadySpent: BudgetInput = BudgetInput.of(0),
     ): TimeBudgetResult {
-        requireNotNull(periodStart)
-        requireNotNull(currentDate)
+        val expensesMandatorySchedule = expensesSchedule?.filter { it.isMandatory }
+        val expensesOptionalSchedule = expensesSchedule?.filter { !it.isMandatory }
 
         var snapshot = buildSnapshot(
             periodStart = periodStart,
@@ -69,9 +72,9 @@ object BudgetCalculator {
         val schedMandTotal = scheduleTotal(expensesMandatorySchedule)
         val schedOptTotal = scheduleTotal(expensesOptionalSchedule)
 
-        val totalIncome = schedIncomeTotal ?: DecimalUtils.sumInput(income ?: BudgetInput.Single(0))
-        val totalMandatory = schedMandTotal ?: DecimalUtils.sumInput(expensesMandatory ?: BudgetInput.Single(0))
-        val totalOptional = schedOptTotal ?: DecimalUtils.sumInput(expensesOptional ?: BudgetInput.Single(0))
+        val totalIncome = schedIncomeTotal ?: DecimalUtils.sumInput(income ?: BudgetInput.of(0))
+        val totalMandatory = schedMandTotal ?: DecimalUtils.sumInput(expensesMandatory ?: BudgetInput.of(0))
+        val totalOptional = schedOptTotal ?: DecimalUtils.sumInput(expensesOptional ?: BudgetInput.of(0))
 
         val totalPiggyPlanned = DecimalUtils.sumInput(piggyPlanned)
         val alreadySpentDec = DecimalUtils.sumInput(alreadySpent)
@@ -127,9 +130,9 @@ object BudgetCalculator {
             piggyActual = DecimalUtils.quantizeMoney(result.piggyActual).toDouble(),
             moneyRemaining = DecimalUtils.quantizeMoney(moneyRemainingValue).toDouble(),
             message = message,
-            periodStart = snapshot.periodStart.toString(),
-            periodEnd = snapshot.periodEnd.toString(),
-            currentDate = snapshot.currentDate.toString(),
+            periodStart = snapshot.periodStart,
+            periodEnd = snapshot.periodEnd,
+            currentDate = snapshot.currentDate,
             daysInPeriod = snapshot.daysInPeriod,
             daysElapsed = snapshot.daysElapsed,
             daysRemaining = snapshot.daysRemaining,
@@ -144,6 +147,10 @@ object BudgetCalculator {
             alreadySpentTotal = DecimalUtils.quantizeMoney(alreadySpentDec).toDouble(),
             burnRate = daily.burnRate,
             messageTime = messageTime,
+            crisisType = result.crisisType,
+            isOverspending = result.crisisType == "overspending",
+            cushionCurrent = DecimalUtils.quantizeMoney(ctx.cushionCurrent).toDouble(),
+            cushionTarget = DecimalUtils.quantizeMoney(ctx.cushionTarget).toDouble(),
         )
     }
 }
