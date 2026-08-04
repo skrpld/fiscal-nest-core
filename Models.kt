@@ -5,12 +5,36 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.util.UUID
 
+sealed interface CrisisType {
+    data object None : CrisisType
+    data object Overspending : CrisisType
+    data object Critical : CrisisType
+    data object CushionDeficit : CrisisType
+}
+
+enum class EventFrequency {
+    ONE_TIME,
+    WEEKLY,
+    MONTHLY,
+    QUARTERLY,
+    YEARLY
+}
+
 data class IncomeEvent(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val amount: BudgetInput,
     val dayOfMonth: Int,
-)
+    val frequency: EventFrequency = EventFrequency.MONTHLY,
+    val startDate: LocalDate? = null,
+    val endDate: LocalDate? = null,
+    val category: String? = null,
+    val isReliable: Boolean = true,
+) {
+    init {
+        require(dayOfMonth in 1..31) { "dayOfMonth must be between 1 and 31, got $dayOfMonth" }
+    }
+}
 
 data class ExpenseEvent(
     val id: String = UUID.randomUUID().toString(),
@@ -18,7 +42,15 @@ data class ExpenseEvent(
     val amount: BudgetInput,
     val dayOfMonth: Int,
     val isMandatory: Boolean = true,
-)
+    val frequency: EventFrequency = EventFrequency.MONTHLY,
+    val startDate: LocalDate? = null,
+    val endDate: LocalDate? = null,
+    val category: String? = null,
+) {
+    init {
+        require(dayOfMonth in 1..31) { "dayOfMonth must be between 1 and 31, got $dayOfMonth" }
+    }
+}
 
 data class CriticalityLevel(
     val name: String,
