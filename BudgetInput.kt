@@ -9,8 +9,14 @@ sealed interface BudgetInput {
         override fun toBigDecimals(): List<BigDecimal> = listOf(value.toBigDecimal())
     }
 
-    data class List(val values: kotlin.collections.List<Number>) : BudgetInput {
+    data class Multiple(val values: kotlin.collections.List<Number>) : BudgetInput {
         override fun toBigDecimals(): List<BigDecimal> = values.map { it.toBigDecimal() }
+    }
+
+    companion object {
+        fun of(value: Number): BudgetInput = Single(value)
+        fun of(vararg values: Number): BudgetInput = Multiple(values.toList())
+        fun of(values: kotlin.collections.List<Number>): BudgetInput = Multiple(values)
     }
 }
 
