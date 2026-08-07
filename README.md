@@ -14,7 +14,7 @@ Fiscal Nest Core is a **standalone, embeddable Kotlin engine** that calculates h
 
 It can be plugged into:
 - Android apps (`fiscal-nest-mobile`)
-- Server-side services
+- Server-side services (JVM / Ktor / Spring)
 - CLI tools
 - Any JVM-compatible runtime
 
@@ -34,6 +34,10 @@ The engine is **pure business logic and stateless**. It does not render messages
 ---
 
 ## Quick Start
+
+The snippets below are **illustrative examples**. They show how a client application calls the engine. The engine itself never prints, logs, or formats output.
+
+### WHAT_IF — Snapshot Calculation
 
 ```kotlin
 import io.github.skrpld.fiscalnest.core.*
@@ -87,6 +91,57 @@ println(result.cushionCrisis)      // true
 println(result.cushionTopup)       // BigDecimal("4000.00")
 println(result.piggyBankActual)    // BigDecimal("2400.00")
 println(result.freeRemainder)      // BigDecimal("13600.00")
+println(result.cushionCurrent)     // BigDecimal("9000.00") — post-distribution
+```
+
+### FORECAST — Multi-Period Projection
+
+```kotlin
+import java.time.LocalDate
+
+val forecast = BudgetCalculator.calculateForecast(
+    ForecastInput(
+        incomeEvents = listOf(
+            IncomeEvent(
+                id = "salary",
+                name = "Salary",
+                amount = BigDecimal("50000"),
+                recurrence = EventRecurrence.EveryNMonths(1, 1, LocalDate.of(2026, 1, 1)),
+                startDate = LocalDate.of(2026, 1, 1),
+                endDate = null,
+                category = "work",
+                isReliable = true
+            )
+        ),
+        expenseEvents = listOf(
+            ExpenseEvent(
+                id = "rent",
+                name = "Rent",
+                amount = BigDecimal("20000"),
+                isMandatory = true,
+                recurrence = EventRecurrence.EveryNMonths(1, 5, LocalDate.of(2026, 1, 5)),
+                startDate = LocalDate.of(2026, 1, 5),
+                endDate = null,
+                category = "housing"
+            )
+        ),
+        periodStart = LocalDate.of(2026, 8, 1),
+        periodEnd = LocalDate.of(2026, 8, 31),
+        currentDate = LocalDate.of(2026, 8, 7),
+        alreadySpent = BigDecimal("3500"),
+        forecastPeriods = 3,
+        config = config,
+        cushionState = CushionState(current = BigDecimal("5000"), target = BigDecimal("20000"))
+    )
+)
+
+// Inspect the first period
+val period1 = forecast[0]
+println(period1.periodStart)               // 2026-08-01
+println(period1.openingBalance)            // 0
+println(period1.distribution.freeRemainder) // free remainder after distribution
+println(period1.dailyMetrics.dailyCashflow) // conservative daily budget
+println(period1.closingBalance)            // carried to next period
 ```
 
 ---
@@ -95,10 +150,10 @@ println(result.freeRemainder)      // BigDecimal("13600.00")
 
 | Document | What's inside |
 |----------|---------------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Entities, Remainder Hierarchy, Distribution Algorithm, Crisis Scenarios, Criticality Levels, Calendar Logic |
-| [docs/API.md](docs/API.md) | Public API contract, Configuration, Output data structures, Daily Metrics |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Entities, Remainder Hierarchy, Distribution Algorithm, Crisis Scenarios, Criticality Levels, Calendar Logic, Thread Safety, Error Handling |
+| [docs/API.md](docs/API.md) | Public API contract, Configuration, Output data structures, Daily Metrics, Exception Reference, Visibility & Module Boundaries |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Definitions of all business terms |
-| [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) | Step-by-step implementation plan with self-contained prompts for each chat session |
+| [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) | Step-by-step implementation guide with self-contained prompts for each chat session |
 
 ---
 
@@ -128,21 +183,35 @@ Post-Cushion Remainder
 
 ```
 fiscal-nest-core/
-  src/main/kotlin/io/github/skrpld/fiscalnest/core/
+  src/main/kotlin/skrpld/fiscalnest/core/
+    // Public API — data classes & enums
     EngineConfig.kt
     CriticalityLevel.kt
+    TopupMode.kt
+    PiggyBankMode.kt
     IncomeEvent.kt
     ExpenseEvent.kt
+    EventRecurrence.kt
     CushionState.kt
+    WhatIfInput.kt
+    ForecastInput.kt
     DistributionResult.kt
     ForecastResult.kt
     PeriodSnapshot.kt
     DailyMetrics.kt
-    BudgetCalculator.kt
-    DistributionEngine.kt
-    CalendarEngine.kt
-    DecimalUtils.kt
-    InputValidator.kt
+    BudgetCalculator.kt          // Public facade
+
+    // Internal implementation
+    DistributionEngine.kt        // internal
+    CalendarEngine.kt            // internal
+    DecimalUtils.kt              // internal
+    InputValidator.kt            // internal
+
+  src/test/kotlin/skrpld/fiscalnest/core/
+    DistributionEngineTest.kt
+    CalendarEngineTest.kt
+    BudgetCalculatorTest.kt
+
   docs/
     ARCHITECTURE.md
     API.md
@@ -151,6 +220,37 @@ fiscal-nest-core/
   README.md
   LICENSE
 ```
+
+---
+
+## Building & Testing
+
+The project is a standard Gradle Kotlin/JVM module.
+
+```bash
+# Build
+./gradlew build
+
+# Run tests
+./gradlew test
+
+# Publish to local Maven (for client integration)
+./gradlew publishToMavenLocal
+```
+
+### Gradle Dependencies (client)
+
+```kotlin
+dependencies {
+    implementation("io.github.skrpld:fiscal-nest-core:1.0.0")
+}
+```
+
+---
+
+## Thread Safety
+
+The engine is **stateless and thread-safe**. All public methods are pure functions with no mutable static state. You may safely share a single `EngineConfig` instance across threads and call `BudgetCalculator` concurrently from multiple coroutines or threads.
 
 ---
 
