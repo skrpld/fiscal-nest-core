@@ -1,7 +1,7 @@
 # Fiscal Nest Core
 
 > **Repository:** `github.com/skrpld/fiscal-nest-core`  
-> **Package:** `io.github.skrpld.fiscalnest.core`  
+> **Package:** `fiscalnest.core`  
 > **License:** BSD-3-Clause (repository-level)  
 > **Language:** English only — code, APIs, KDoc, docs  
 > **Scope:** Stateless Kotlin business-logic engine. No UI, no DB, no formatting.
@@ -40,7 +40,7 @@ The snippets below are **illustrative examples**. They show how a client applica
 ### WHAT_IF — Snapshot Calculation
 
 ```kotlin
-import io.github.skrpld.fiscalnest.core.*
+import fiscalnest.core.*
 import java.math.BigDecimal
 import java.math.RoundingMode
 
@@ -52,14 +52,14 @@ val config = EngineConfig(
     criticalityLevels = listOf(
         CriticalityLevel(
             name = "Critical",
-            maxFillPct = BigDecimal("30"),
+            maxFillPct = BigDecimal("0.30"),
             topupMode = TopupMode.PERCENT_OF_TARGET,
             topupValue = BigDecimal("0.20"),
             admissibilityPct = BigDecimal("0.80")
         ),
         CriticalityLevel(
             name = "Warning",
-            maxFillPct = BigDecimal("70"),
+            maxFillPct = BigDecimal("0.70"),
             topupMode = TopupMode.PERCENT_OF_REMAINDER,
             topupValue = BigDecimal("0.10"),
             admissibilityPct = BigDecimal("0.50")
@@ -183,7 +183,7 @@ Post-Cushion Remainder
 
 ```
 fiscal-nest-core/
-  src/main/kotlin/skrpld/fiscalnest/core/
+  src/main/kotlin/fiscalnest/core/
     // Public API — data classes & enums
     EngineConfig.kt
     CriticalityLevel.kt
@@ -207,7 +207,7 @@ fiscal-nest-core/
     DecimalUtils.kt              // internal
     InputValidator.kt            // internal
 
-  src/test/kotlin/skrpld/fiscalnest/core/
+  src/test/kotlin/fiscalnest/core/
     DistributionEngineTest.kt
     CalendarEngineTest.kt
     BudgetCalculatorTest.kt

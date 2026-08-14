@@ -24,6 +24,15 @@
 
 ---
 
+## Communication Rules for Discussion Steps
+
+These rules apply only to steps whose deliverable is discussion, analysis, or a decision — not code (currently: **Step 0** and **Step 1**). They do not affect the Code Style Rules above, which remain in force for every code/KDoc/Markdown-spec artifact regardless of step.
+
+- **Language:** the AI communicates with the user in Russian during these steps. Code, KDoc, `FISCAL_NEST_CORE_LOCKED.md`, and any other technical specification file stay English-only, per "No Russian in code" above — this rule governs the conversation only, not the artifacts it produces.
+- **Level of involvement:** the user controls product ideas and reviews the final result, but is minimally involved in implementation. During discussion steps, the AI raises only business-logic questions and decisions (what the engine should do, and why) and does not ask the user to evaluate Kotlin/architecture-level implementation detail. Technical decisions with no business-rule impact are made by the AI on its own and simply noted, not put to the user for review.
+
+---
+
 ## Step 0 — Project Kick-off
 
 **Goal:** Load context, understand boundaries, and confirm the toolchain.
@@ -41,6 +50,8 @@
 You are starting the Fiscal Nest Core engine implementation.
 
 Read the attached spec files (README.md, ARCHITECTURE.md, API.md, GLOSSARY.md, DEVELOPMENT_PLAN.md).
+
+Follow the "Communication Rules for Discussion Steps" section of DEVELOPMENT_PLAN.md for this session: reply in Russian, and keep discussion at the business-logic level rather than implementation detail.
 
 Do NOT write any code. Only produce a brief summary confirming:
 1. The package name.
@@ -74,6 +85,8 @@ If you find contradictions, list them with file references and suggest resolutio
 ```plain
 You are performing Step 1 of the Fiscal Nest Core engine.
 
+Follow the "Communication Rules for Discussion Steps" section of DEVELOPMENT_PLAN.md for this session: reply in Russian, and keep discussion at the business-logic level rather than implementation detail. The locked spec document itself stays in English per the Code Style Rules.
+
 **Task:** Produce a single locked specification document named `FISCAL_NEST_CORE_LOCKED.md` that consolidates and resolves any ambiguities from the attached spec files.
 
 **Requirements for the locked spec:**
@@ -88,8 +101,6 @@ You are performing Step 1 of the Fiscal Nest Core engine.
 6. Include the exact formulas for DailyMetrics.
 7. Include the exact validation rules and exception messages.
 8. Mark the document as "LOCKED — v1.0". No further edits without a formal amendment process.
-
-Save the file to /mnt/agents/output/FISCAL_NEST_CORE_LOCKED.md.
 ```
 
 **Acceptance Criteria:**
@@ -107,7 +118,7 @@ Save the file to /mnt/agents/output/FISCAL_NEST_CORE_LOCKED.md.
 
 **Pre-flight Checklist:**
 - [ ] `FISCAL_NEST_CORE_LOCKED.md` is complete and reviewed.
-- [ ] Package name is confirmed: `io.github.skrpld.fiscalnest.core`.
+- [ ] Package name is confirmed: `fiscalnest.core`.
 
 **Files to Attach:** `FISCAL_NEST_CORE_LOCKED.md`
 
@@ -118,7 +129,7 @@ You are implementing Step 2 of the Fiscal Nest Core engine.
 **Source of truth:** `FISCAL_NEST_CORE_LOCKED.md`.
 
 **Tasks:**
-1. Create the package `io.github.skrpld.fiscalnest.core`.
+1. Create the package `fiscalnest.core`.
 2. Define the following public data classes / interfaces / enums in Kotlin:
    - `EngineConfig` (roundingMode, moneyScale, percentageScale, criticalityLevels, piggyBankMode, piggyBankTarget, piggyBankAdmissibilityPct)
    - `CriticalityLevel` (name, maxFillPct, topupMode, topupValue, admissibilityPct)
@@ -139,7 +150,6 @@ You are implementing Step 2 of the Fiscal Nest Core engine.
 5. Do NOT write any calculation logic. Only data structures.
 6. Do NOT add any formatting, messaging, or platform-specific code.
 7. Do NOT add inline comments. Use KDoc for all public declarations.
-8. Save all files under `/mnt/agents/output/fiscal-nest-core/src/main/kotlin/io/github/skrpld/fiscalnest/core/`.
 ```
 
 **Acceptance Criteria:**
@@ -189,7 +199,6 @@ You are implementing Step 3 of the Fiscal Nest Core engine.
    - Recurrence parameters (`n`, `dayOfMonth`) are positive.
 4. On failure throw `IllegalArgumentException` with a descriptive English message.
 5. Do NOT add inline comments. Use KDoc for all public/internal declarations.
-6. Save files under the same package directory.
 ```
 
 **Acceptance Criteria:**
@@ -244,7 +253,6 @@ You are implementing Step 4 of the Fiscal Nest Core engine.
 7. Validate that `currentDate` is within [periodStart, periodEnd] (delegate to InputValidator or inline).
 8. Do NOT compute daily metrics here. Only the snapshot.
 9. Do NOT add inline comments. Use KDoc for all declarations.
-10. Save under the same package directory.
 ```
 
 **Acceptance Criteria:**
@@ -313,7 +321,6 @@ You are implementing Step 5 of the Fiscal Nest Core engine.
 6. Use `DecimalUtils` for all quantizations.
 7. Do NOT reference any formatter, message, or string output.
 8. Do NOT add inline comments. Use KDoc for all declarations.
-9. Save under the same package directory.
 ```
 
 **Acceptance Criteria:**
@@ -386,7 +393,6 @@ You are implementing Step 6 of the Fiscal Nest Core engine.
 4. Do NOT import or use any formatter classes.
 5. Do NOT produce any `String` output.
 6. Do NOT add inline comments. Use KDoc for all public declarations.
-7. Save under the same package directory.
 ```
 
 **Acceptance Criteria:**
@@ -410,7 +416,7 @@ You are implementing Step 6 of the Fiscal Nest Core engine.
 - [ ] Steps 2-6 are complete.
 - [ ] All `.kt` files in the engine module have been written.
 
-**Files to Attach:** All `.kt` files from `src/main/kotlin/io/github/skrpld/fiscalnest/core/`, `README.md`
+**Files to Attach:** All `.kt` files from `src/main/kotlin/fiscalnest/core/`, `README.md`
 
 **Prompt:**
 ```plain
@@ -437,7 +443,6 @@ You are implementing Step 7 of the Fiscal Nest Core engine.
    - That the engine returns pure data and flags.
    - Sample pseudo-code for rendering a `DistributionResult` into a user-facing message.
    - Sample pseudo-code for rendering a `ForecastResult` list into a timeline UI.
-7. Save `README-CLIENT.md` to `/mnt/agents/output/fiscal-nest-core/README-CLIENT.md`.
 ```
 
 **Acceptance Criteria:**
@@ -459,7 +464,7 @@ You are implementing Step 7 of the Fiscal Nest Core engine.
 - [ ] Step 7 cleanup is complete.
 - [ ] All public classes, methods, and properties are stable.
 
-**Files to Attach:** All `.kt` files from `src/main/kotlin/io/github/skrpld/fiscalnest/core/`
+**Files to Attach:** All `.kt` files from `src/main/kotlin/fiscalnest/core/`
 
 **Prompt:**
 ```plain
@@ -479,7 +484,6 @@ You are implementing Step 8 of the Fiscal Nest Core engine.
 4. Ensure no KDoc contains Russian, emojis, or implementation details that belong in code comments rather than API docs.
 5. Ensure there are NO inline comments anywhere in the code. KDoc only.
 6. Update the main `README.md` with any corrections discovered during KDoc writing.
-7. Save all updated files.
 ```
 
 **Acceptance Criteria:**
@@ -500,7 +504,7 @@ You are implementing Step 8 of the Fiscal Nest Core engine.
 - [ ] Steps 1-8 are complete.
 - [ ] All `.kt` files are finalized.
 
-**Files to Attach:** All `.kt` files from `src/main/kotlin/io/github/skrpld/fiscalnest/core/`, `FISCAL_NEST_CORE_LOCKED.md`
+**Files to Attach:** All `.kt` files from `src/main/kotlin/fiscalnest/core/`, `FISCAL_NEST_CORE_LOCKED.md`
 
 **Prompt:**
 ```plain
@@ -536,7 +540,6 @@ You are implementing Step 9 of the Fiscal Nest Core engine.
    - A `FORECAST` call with recurring income and expenses.
    - Reading `dailyMetrics` and `distribution` from `ForecastResult`.
 6. Produce a final sign-off statement: "Engine is compliant with spec v1.0" or "Engine requires fixes: [list]".
-7. Save `AUDIT_REPORT.md` and `SAMPLE_USAGE.kt` to `/mnt/agents/output/fiscal-nest-core/`.
 ```
 
 **Acceptance Criteria:**
@@ -557,7 +560,7 @@ You are implementing Step 9 of the Fiscal Nest Core engine.
 - [ ] Step 9 audit is PASS (or all FAIL items are fixed).
 - [ ] All public APIs are stable.
 
-**Files to Attach:** `FISCAL_NEST_CORE_LOCKED.md`, all `.kt` files from `src/main/kotlin/io/github/skrpld/fiscalnest/core/`
+**Files to Attach:** `FISCAL_NEST_CORE_LOCKED.md`, all `.kt` files from `src/main/kotlin/fiscalnest/core/`
 
 **Prompt:**
 ```plain
@@ -596,7 +599,7 @@ You are implementing Step 10 of the Fiscal Nest Core engine.
 5. All tests must use `BigDecimal` with `compareTo`, never `==` for doubles or float comparisons.
 6. Aim for 100% branch coverage of `DistributionEngine` and `CalendarEngine`.
 7. Do NOT add inline comments in test code. Use KDoc for test classes and methods.
-8. Save tests under `src/test/kotlin/io/github/skrpld/fiscalnest/core/`.
+8. Save tests under `src/test/kotlin/fiscalnest/core/`.
 9. Produce `TEST_REPORT.md` summarizing:
    - Total test count.
    - Coverage targets.
