@@ -229,7 +229,7 @@ You are implementing Step 4 of the Fiscal Nest Core engine.
 
 **Tasks:**
 1. Create `CalendarEngine` as an internal class with a single public method:
-   ```kotlin
+   kotlin:
    fun buildSnapshot(
        periodStart: LocalDate,
        periodEnd: LocalDate,
@@ -238,7 +238,7 @@ You are implementing Step 4 of the Fiscal Nest Core engine.
        expenseEvents: List<ExpenseEvent>,
        alreadySpent: BigDecimal
    ): PeriodSnapshot
-   ```
+   
 2. Implement recurrence resolution for all three `EventRecurrence` types:
    - `OneTime`: include if date is within [periodStart, periodEnd] and >= event.startDate and <= event.endDate (if endDate != null).
    - `EveryNDays`: generate dates from `startDate` stepping by `n` days, include those within the period and within [startDate, endDate].
@@ -284,7 +284,7 @@ You are implementing Step 5 of the Fiscal Nest Core engine.
 
 **Tasks:**
 1. Create `DistributionEngine` as an internal class with a public method:
-   ```kotlin
+   kotlin:
    fun distribute(
        income: BigDecimal,
        mandatory: BigDecimal,
@@ -292,7 +292,7 @@ You are implementing Step 5 of the Fiscal Nest Core engine.
        cushionState: CushionState,
        config: EngineConfig
    ): DistributionResult
-   ```
+
    Note: There is NO `available` parameter. Liquidity is handled by BudgetCalculator.
 2. Implement the Remainder Hierarchy exactly as defined:
    - `rawRemainder = income - mandatory`
@@ -354,10 +354,10 @@ You are implementing Step 6 of the Fiscal Nest Core engine.
 
 **Tasks:**
 1. Create `BudgetCalculator` as a public stateless object with two public entry points:
-   ```kotlin
+   kotlin:
    fun calculateWhatIf(input: WhatIfInput): DistributionResult
    fun calculateForecast(input: ForecastInput): List<ForecastResult>
-   ```
+
 2. `calculateWhatIf`:
    - Validate inputs via `InputValidator`.
    - Call `DistributionEngine.distribute` with `income`, `mandatory`, `optional`, `cushionState`, `config`.
