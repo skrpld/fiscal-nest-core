@@ -1,38 +1,50 @@
+/*
+ * Copyright 2026 skrpld
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package fiscalnest.core
 
-import java.time.LocalDate
-
 /**
- * Defines how an income or expense event recurs.
+ * Defines when an event repeats. Every pattern is anchored at the owning event's `startDate` and
+ * never produces a date outside the event's `[startDate, endDate]` window.
+ *
+ * @see IncomeEvent
+ * @see ExpenseEvent
  */
 sealed class EventRecurrence {
     /**
-     * Represents an event occurring on one date.
+     * A single occurrence on the event's `startDate`.
      */
-    data class OneTime(val date: LocalDate) : EventRecurrence()
+    data object OneTime : EventRecurrence()
 
     /**
-     * Represents an event recurring every given number of days.
+     * Occurrences on `startDate`, `startDate + n days`, `startDate + 2n days`, and so on.
+     *
+     * @property n step in calendar days, `>= 1`
+     * @throws IllegalArgumentException if [n] is not positive
      */
-    data class EveryNDays(val n: Int, val startDate: LocalDate) : EventRecurrence() {
+    data class EveryNDays(val n: Int) : EventRecurrence() {
         init {
-            require(n >= 1) { "Recurrence parameter must be positive: n" }
+            InputValidator.validateRecurrence(this)
         }
     }
 
     /**
-     * Represents an event recurring every given number of months on a day of month.
+     * Occurrences on [dayOfMonth] every [n] months. The first occurrence is the first such day on
+     * or after the event's `startDate`. A [dayOfMonth] beyond the length of a month falls on that
+     * month's last day, so `31` always means "end of month".
+     *
+     * @property n step in calendar months, `>= 1`
+     * @property dayOfMonth day of month, `1..31`
+     * @throws IllegalArgumentException if [n] is not positive or [dayOfMonth] is outside `1..31`
      */
     data class EveryNMonths(
         val n: Int,
-        val dayOfMonth: Int,
-        val startDate: LocalDate
+        val dayOfMonth: Int
     ) : EventRecurrence() {
         init {
-            require(n >= 1) { "Recurrence parameter must be positive: n" }
-            require(dayOfMonth >= 1) {
-                "Recurrence parameter must be positive: dayOfMonth"
-            }
+            InputValidator.validateRecurrence(this)
         }
     }
 }

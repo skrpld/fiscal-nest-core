@@ -1,10 +1,32 @@
+/*
+ * Copyright 2026 skrpld
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package fiscalnest.core
 
 import java.math.BigDecimal
 import java.math.RoundingMode
 
 /**
- * Configuration for the fiscal nest core engine.
+ * Configuration for every calculation. Passed explicitly on each call; the engine keeps no state.
+ *
+ * Every percentage-like value is a ratio on the `0.0..1.0` scale. Converting to a `0..100`
+ * display value is a client concern.
+ *
+ * @property roundingMode rounding applied whenever a value is quantized
+ * @property moneyScale decimal places of every monetary input and output, `0..1000`; `2` for cents
+ * @property percentageScale decimal places of reported ratios such as
+ * [DistributionResult.cushionFillPct], `0..1000`; `4` keeps two decimals once shown as `0..100`
+ * @property criticalityLevels non-empty list of cushion levels sorted by
+ * [CriticalityLevel.maxFillPct] ascending, without duplicates
+ * @property piggyBankMode how [piggyBankTarget] is interpreted
+ * @property piggyBankTarget ratio in `0.0..1.0` of the post-cushion remainder for
+ * [PiggyBankMode.PERCENT_OF_REMAINDER], or a non-negative amount for [PiggyBankMode.FIXED_AMOUNT]
+ * @property piggyBankAdmissibilityPct largest share, `0.0..1.0`, of the post-cushion remainder
+ * that may go to the piggy bank
+ * @throws IllegalArgumentException if any property violates the rules above
+ * @see CriticalityLevel
  */
 data class EngineConfig(
     val roundingMode: RoundingMode,
@@ -16,39 +38,21 @@ data class EngineConfig(
     val piggyBankAdmissibilityPct: BigDecimal
 ) {
     init {
-        require(moneyScale >= 0) { "Scale must be >= 0: moneyScale" }
-        require(percentageScale >= 0) { "Scale must be >= 0: percentageScale" }
-        require(criticalityLevels.isNotEmpty()) {
-            "Criticality levels must be non-empty and sorted by maxFillPct ascending."
-        }
-        criticalityLevels.zipWithNext().forEach { (first, second) ->
-            require(first.maxFillPct < second.maxFillPct) {
-                if (first.maxFillPct == second.maxFillPct) {
-                    "Criticality level ranges overlap: ${first.name} and ${second.name}"
-                } else {
-                    "Criticality levels must be non-empty and sorted by maxFillPct ascending."
-                }
-            }
-        }
-        require(piggyBankTarget.signum() >= 0) {
-            "Amount must be non-negative: piggyBankTarget"
-        }
-        if (piggyBankMode == PiggyBankMode.PERCENT_OF_REMAINDER) {
-            require(piggyBankTarget.inPercentageRange()) {
-                "Percentage must be in [0,1]: piggyBankTarget"
-            }
-        }
-        require(piggyBankAdmissibilityPct.inPercentageRange()) {
-            "Percentage must be in [0,1]: piggyBankAdmissibilityPct"
-        }
+        InputValidator.validateConfig(this)
     }
-
-    private fun BigDecimal.inPercentageRange(): Boolean =
-        compareTo(BigDecimal.ZERO) >= 0 && compareTo(BigDecimal.ONE) <= 0
 }
 
 /**
- * Defines the criticality threshold and top-up policy for a cushion level.
+ * A cushion criticality level: when the cushion fill ratio is below [maxFillPct], this level
+ * decides how much of the net remainder is redirected to the cushion.
+ *
+ * @property name opaque label, reported back as [DistributionResult.activeCriticalityLevel]
+ * @property maxFillPct exclusive upper bound of the fill ratio, in `(0.0..1.0]`
+ * @property topupMode what [topupValue] is a share of
+ * @property topupValue desired top-up as a ratio in `0.0..1.0`
+ * @property admissibilityPct largest share, `0.0..1.0`, of the net remainder this level may take
+ * @throws IllegalArgumentException if any ratio is outside its range
+ * @see EngineConfig.criticalityLevels
  */
 data class CriticalityLevel(
     val name: String,
@@ -58,17 +62,6 @@ data class CriticalityLevel(
     val admissibilityPct: BigDecimal
 ) {
     init {
-        require(maxFillPct > BigDecimal.ZERO && maxFillPct <= BigDecimal.ONE) {
-            "Percentage must be in [0,1]: maxFillPct"
-        }
-        require(topupValue.inPercentageRange()) {
-            "Percentage must be in [0,1]: topupValue"
-        }
-        require(admissibilityPct.inPercentageRange()) {
-            "Percentage must be in [0,1]: admissibilityPct"
-        }
+        InputValidator.validateCriticalityLevel(this)
     }
-
-    private fun BigDecimal.inPercentageRange(): Boolean =
-        compareTo(BigDecimal.ZERO) >= 0 && compareTo(BigDecimal.ONE) <= 0
 }
