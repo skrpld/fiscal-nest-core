@@ -41,7 +41,9 @@ object BudgetCalculator {
      *
      * Each period gets a plan over all of its events and a cash view split at its current date.
      * The closing balance and the post-distribution cushion balance of a period carry into the
-     * next one; unscheduled spending applies to the first period only. Cost and result size grow
+     * next one. A carried free balance stays free money and is never redistributed to the cushion
+     * or the piggy bank; a carried deficit is covered by the next plan before anything else.
+     * Unscheduled spending applies to the first period only. Cost and result size grow
      * linearly with the number of periods and events.
      *
      * @param input events, first period, current date, horizon, cushion state and configuration
@@ -70,13 +72,14 @@ object BudgetCalculator {
             val alreadySpent = if (isFirst) DecimalUtils.quantizeMoney(input.alreadySpent, config) else zero
             val cashFlow = cashFlow(snapshot, openingBalance, alreadySpent, config)
             val distribution = distributionEngine.distribute(
-                income = openingBalance + cashFlow.receivedIncome + cashFlow.pendingIncome,
+                income = openingBalance.min(zero) + cashFlow.receivedIncome + cashFlow.pendingIncome,
                 mandatory = cashFlow.paidMandatory + cashFlow.upcomingMandatory,
                 optional = cashFlow.paidOptional + cashFlow.upcomingOptional,
                 cushionState = cushionState,
                 config = config
             )
-            val closingBalance = distribution.freeRemainder - alreadySpent
+            val freeBalance = openingBalance.max(zero) + distribution.freeRemainder
+            val closingBalance = freeBalance - alreadySpent
             results += ForecastResult(
                 periodStart = snapshot.periodStart,
                 periodEnd = snapshot.periodEnd,
@@ -85,10 +88,11 @@ object BudgetCalculator {
                 daysElapsed = snapshot.daysElapsed,
                 daysRemaining = snapshot.daysRemaining,
                 openingBalance = openingBalance,
+                freeBalance = freeBalance,
                 closingBalance = closingBalance,
                 distribution = distribution,
                 cashFlow = cashFlow,
-                dailyMetrics = dailyMetrics(snapshot, distribution, cashFlow, config)
+                dailyMetrics = dailyMetrics(snapshot, freeBalance, distribution, cashFlow, config)
             )
             openingBalance = closingBalance
             cushionState = CushionState(distribution.cushionCurrent, cushionState.target)
@@ -123,12 +127,13 @@ object BudgetCalculator {
 
     private fun dailyMetrics(
         snapshot: PeriodSnapshot,
+        freeBalance: BigDecimal,
         distribution: DistributionResult,
         cashFlow: CashFlow,
         config: EngineConfig
     ): DailyMetrics = DailyMetrics(
-        dailyPlan = DecimalUtils.perDay(distribution.freeRemainder, snapshot.daysInPeriod, config),
-        dailyActual = DecimalUtils.perDay(distribution.freeRemainder - cashFlow.alreadySpent, snapshot.daysRemaining, config),
+        dailyPlan = DecimalUtils.perDay(freeBalance, snapshot.daysInPeriod, config),
+        dailyActual = DecimalUtils.perDay(freeBalance - cashFlow.alreadySpent, snapshot.daysRemaining, config),
         dailyCashflow = DecimalUtils.perDay(cashFlow.available - distribution.cushionTopup, snapshot.daysRemaining, config),
         burnRate = DecimalUtils.perDay(cashFlow.alreadySpent, snapshot.daysElapsed + 1, config)
     )

@@ -71,6 +71,7 @@ class BudgetCalculatorTest {
         assertDecimal("20000", first.distribution.totalMandatory)
         assertDecimal("4000", first.distribution.cushionTopup)
         assertDecimal("21000", first.distribution.freeRemainder)
+        assertDecimal("21000", first.freeBalance)
 
         assertDecimal("50000", first.cashFlow.receivedIncome)
         assertDecimal("20000", first.cashFlow.paidMandatory)
@@ -100,23 +101,24 @@ class BudgetCalculatorTest {
         assertEquals(30, second.daysRemaining)
         assertDecimal(first.closingBalance.toPlainString(), second.openingBalance)
         assertDecimal("0", second.cashFlow.alreadySpent)
-        assertDecimal("67500", second.distribution.totalIncome)
+        assertDecimal("50000", second.distribution.totalIncome)
         assertDecimal("0.45", second.distribution.cushionFillPct)
         assertEquals("Warning", second.distribution.activeCriticalityLevel)
-        assertDecimal("4750", second.distribution.cushionTopup)
-        assertDecimal("13750", second.distribution.cushionCurrent)
-        assertDecimal("37750", second.closingBalance)
-        assertDecimal("20000", second.cashFlow.mustReserve)
-        assertDecimal("47500", second.cashFlow.available)
-        assertDecimal("1425", second.dailyMetrics.dailyCashflow)
+        assertDecimal("3000", second.distribution.cushionTopup)
+        assertDecimal("12000", second.distribution.cushionCurrent)
+        assertDecimal("22000", second.distribution.freeRemainder)
+        assertDecimal("39500", second.freeBalance)
+        assertDecimal("39500", second.closingBalance)
+        assertDecimal("67500", second.cashFlow.liquidOnHand)
+        assertDecimal("1316.67", second.dailyMetrics.dailyPlan)
         assertDecimal("0", second.dailyMetrics.burnRate)
 
         assertEquals(date(2026, 10, 1), third.periodStart)
         assertEquals(date(2026, 10, 31), third.periodEnd)
-        assertDecimal("37750", third.openingBalance)
-        assertDecimal("6250", third.distribution.cushionTopup)
-        assertDecimal("20000", third.distribution.cushionCurrent)
-        assertDecimal("56500", third.closingBalance)
+        assertDecimal("39500", third.openingBalance)
+        assertDecimal("3000", third.distribution.cushionTopup)
+        assertDecimal("15000", third.distribution.cushionCurrent)
+        assertDecimal("61500", third.closingBalance)
     }
 
     /**
@@ -139,6 +141,41 @@ class BudgetCalculatorTest {
     }
 
     /**
+     * Carried free money stays free: it is not redistributed to the cushion or the piggy bank.
+     */
+    @Test
+    fun `keeps a carried free balance out of the piggy bank and the cushion`() {
+        val greedy = config(
+            criticalityLevels = listOf(level("Always", "1", TopupMode.PERCENT_OF_REMAINDER, "0.10", "1")),
+            piggyBankMode = PiggyBankMode.PERCENT_OF_REMAINDER,
+            piggyBankTarget = "0.50",
+            piggyBankAdmissibilityPct = "1"
+        )
+        val (first, second) = BudgetCalculator.calculateForecast(
+            ForecastInput(
+                incomeEvents = listOf(salaryOnThe1st),
+                expenseEvents = listOf(rentOnThe5th),
+                periodStart = date(2026, 8, 1),
+                periodEnd = date(2026, 8, 31),
+                currentDate = date(2026, 8, 1),
+                alreadySpent = dec("0"),
+                forecastPeriods = 2,
+                config = greedy,
+                cushionState = cushion("0", "1000000")
+            )
+        )
+        assertDecimal("3000", first.distribution.cushionTopup)
+        assertDecimal("13500", first.distribution.piggyBankActual)
+        assertDecimal("13500", first.closingBalance)
+
+        assertDecimal("13500", second.openingBalance)
+        assertDecimal("50000", second.distribution.totalIncome)
+        assertDecimal("3000", second.distribution.cushionTopup)
+        assertDecimal("13500", second.distribution.piggyBankActual)
+        assertDecimal("27000", second.freeBalance)
+    }
+
+    /**
      * A deficit is carried into the next period as a negative opening balance.
      */
     @Test
@@ -151,6 +188,8 @@ class BudgetCalculatorTest {
         assertDecimal("-5000", second.openingBalance)
         assertDecimal("5000", second.distribution.totalIncome)
         assertDecimal("10000", second.distribution.expenseDeficit)
+        assertDecimal("-10000", second.freeBalance)
+        assertDecimal("-10000", second.closingBalance)
     }
 
     /**
