@@ -21,7 +21,6 @@ internal object InputValidator {
         requireMoney(input.income, "income")
         requireMoney(input.mandatory, "mandatory")
         requireMoney(input.optional, "optional")
-        requireMoney(input.alreadySpent, "alreadySpent")
         validateCushion(input.cushionState)
         validateConfig(input.config)
     }

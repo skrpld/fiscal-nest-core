@@ -5,21 +5,19 @@
 
 package fiscalnest.core
 
-import java.time.LocalDate
-
 /**
  * Defines how an income or expense event recurs.
  */
 sealed class EventRecurrence {
     /**
-     * Represents an event occurring on one date.
+     * Represents an event occurring once, on the event start date.
      */
-    data class OneTime(val date: LocalDate) : EventRecurrence()
+    data object OneTime : EventRecurrence()
 
     /**
      * Represents an event recurring every given number of days.
      */
-    data class EveryNDays(val n: Int, val startDate: LocalDate) : EventRecurrence() {
+    data class EveryNDays(val n: Int) : EventRecurrence() {
         init {
             require(n >= 1) { "Recurrence parameter must be positive: n" }
         }
@@ -30,8 +28,7 @@ sealed class EventRecurrence {
      */
     data class EveryNMonths(
         val n: Int,
-        val dayOfMonth: Int,
-        val startDate: LocalDate
+        val dayOfMonth: Int
     ) : EventRecurrence() {
         init {
             require(n >= 1) { "Recurrence parameter must be positive: n" }

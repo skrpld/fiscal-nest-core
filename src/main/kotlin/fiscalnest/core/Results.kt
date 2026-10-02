@@ -69,7 +69,7 @@ data class DailyMetrics(
 /**
  * Contains the resolved calendar and liquidity snapshot for a forecast period.
  */
-data class PeriodSnapshot(
+internal data class PeriodSnapshot(
     val periodStart: LocalDate,
     val periodEnd: LocalDate,
     val currentDate: LocalDate,

@@ -8,7 +8,7 @@ package fiscalnest.core
 import java.math.BigDecimal
 
 /**
- * Provides exact decimal summation and configurable quantization.
+ * Provides configurable decimal quantization.
  */
 internal object DecimalUtils {
     /**
@@ -30,20 +30,6 @@ internal object DecimalUtils {
      */
     fun quantizePct(value: BigDecimal, config: EngineConfig): BigDecimal =
         value.setScale(config.percentageScale, config.roundingMode)
-
-    /**
-     * Sums non-negative decimal values without quantization.
-     *
-     * @param values values to sum
-     * @return exact sum of the values
-     * @throws IllegalArgumentException if a value is negative
-     */
-    fun sum(values: List<BigDecimal>): BigDecimal {
-        values.forEachIndexed { index, value ->
-            requireNonNegative(value, "values[$index]")
-        }
-        return values.fold(BigDecimal.ZERO, BigDecimal::add)
-    }
 
     /**
      * Requires a decimal value to be non-negative.

@@ -13,13 +13,10 @@ import java.time.LocalDate
  */
 data class IncomeEvent(
     val id: String,
-    val name: String,
     val amount: BigDecimal,
     val recurrence: EventRecurrence,
     val startDate: LocalDate,
-    val endDate: LocalDate?,
-    val category: String?,
-    val isReliable: Boolean
+    val endDate: LocalDate?
 ) {
     init {
         require(amount.signum() >= 0) {

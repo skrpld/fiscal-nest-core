@@ -33,16 +33,12 @@ data class WhatIfInput(
     val mandatory: BigDecimal,
     val optional: BigDecimal,
     val cushionState: CushionState,
-    val alreadySpent: BigDecimal,
     val config: EngineConfig
 ) {
     init {
         require(income.signum() >= 0) { "Amount must be non-negative: income" }
         require(mandatory.signum() >= 0) { "Amount must be non-negative: mandatory" }
         require(optional.signum() >= 0) { "Amount must be non-negative: optional" }
-        require(alreadySpent.signum() >= 0) {
-            "Amount must be non-negative: alreadySpent"
-        }
     }
 }
 
