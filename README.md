@@ -1,5 +1,7 @@
 # Fiscal Nest Core
 
+[![CI](https://github.com/skrpld/fiscal-nest-core/actions/workflows/ci.yml/badge.svg)](https://github.com/skrpld/fiscal-nest-core/actions/workflows/ci.yml)
+
 > **Repository:** `github.com/skrpld/fiscal-nest-core`  
 > **Package:** `fiscalnest.core`  
 > **License:** Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE)  
@@ -36,9 +38,11 @@ In `FORECAST` mode income and expenses are always treated the same way:
 | View | Field | Counts | Answers |
 |------|-------|--------|---------|
 | **Plan** | `distribution` | every income and expense of the period, whatever its date | How should this period's money be allocated? (same rules as `WHAT_IF`) |
-| **Cash** | `cashFlow` | income received and expenses paid by `currentDate`; upcoming mandatory expenses are reserved | What is safe to spend right now? |
+| **Cash** | `cashFlow` | income received and expenses paid by `currentDate`; upcoming mandatory expenses plus the reserves you choose are set aside | What is safe to spend right now? |
 
 A salary that arrives after the rent is therefore not an expense crisis in the plan, while the cash view still shows the gap until payday.
+
+Free money left at the end of a period carries into the next one and **stays free**: it is never redistributed to the cushion or the piggy bank. A carried deficit, on the other hand, is covered by the next plan first.
 
 All percentage-like values are **ratios on the `0.0–1.0` scale** (`0.25` = 25%). Showing `0–100` is up to the client.
 
@@ -78,9 +82,12 @@ val config = EngineConfig(
     ),
     piggyBankMode = PiggyBankMode.FIXED_AMOUNT,
     piggyBankTarget = BigDecimal("5000"),
-    piggyBankAdmissibilityPct = BigDecimal("0.80")
+    piggyBankAdmissibilityPct = BigDecimal("0.80"),
+    cashReserves = setOf(CashReserve.CUSHION_TOPUP)
 )
 ```
+
+`cashReserves` decides what the cash view sets aside besides upcoming mandatory expenses: `CUSHION_TOPUP`, `PIGGY_BANK`, `UPCOMING_OPTIONAL`, any combination, or nothing.
 
 ### WHAT_IF — Snapshot Calculation
 
@@ -141,14 +148,18 @@ val forecast = BudgetCalculator.calculateForecast(
 val august = forecast[0]
 august.distribution.freeRemainder  // 21000.00  plan: 50000 - 20000 - 4000 cushion - 5000 piggy
 august.cashFlow.paidMandatory      // 20000.00  rent of Aug 5 is already paid
-august.cashFlow.available          // 26500.00  50000 - 20000 - 3500 already spent
+august.cashFlow.mustReserve        // 4000.00   cushion top-up, as configured
+august.cashFlow.available          // 22500.00  50000 - 20000 - 3500 already spent - 4000
 august.closingBalance              // 17500.00  21000 - 3500, carried into September
 august.dailyMetrics.dailyActual    // 700.00    17500 / 25 remaining days
-august.dailyMetrics.dailyCashflow  // 900.00    (26500 - 4000 cushion) / 25
+august.dailyMetrics.dailyCashflow  // 900.00    22500 / 25
 
-forecast[1].periodStart            // 2026-09-01 (periods follow calendar months)
-forecast[1].periodEnd              // 2026-09-30
-forecast[1].openingBalance         // 17500.00
+val september = forecast[1]
+september.periodStart              // 2026-09-01 (periods follow calendar months)
+september.periodEnd                // 2026-09-30
+september.openingBalance           // 17500.00
+september.distribution.totalIncome // 50000.00  carried money is not redistributed
+september.freeBalance              // 39500.00  17500 carried + 22000 new free remainder
 ```
 
 ### Recurrence
@@ -191,7 +202,7 @@ The allocations always add up exactly: `Net Remainder = Cushion Top-up + Piggy B
 
 | Document | What's inside |
 |----------|---------------|
-| [FISCAL_NEST_CORE_LOCKED.md](FISCAL_NEST_CORE_LOCKED.md) | **Single source of truth** (spec v1.1): exact types, algorithm, formulas, validation messages, amendment log |
+| [FISCAL_NEST_CORE_LOCKED.md](FISCAL_NEST_CORE_LOCKED.md) | **Single source of truth** (spec v1.2): exact types, algorithm, formulas, validation messages, amendment log |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Entities, Remainder Hierarchy, Crisis Scenarios, Criticality Levels, Calendar Logic, Plan vs Cash, Thread Safety, Error Handling |
 | [API.md](API.md) | Public API contract, Configuration, Output data structures, Daily Metrics, Exception Reference |
 | [GLOSSARY.md](GLOSSARY.md) | Definitions of all business terms |
@@ -206,7 +217,7 @@ fiscal-nest-core/
   src/main/kotlin/fiscalnest/core/
     BudgetCalculator.kt      public facade
     EngineConfig.kt          EngineConfig, CriticalityLevel
-    Modes.kt                 TopupMode, PiggyBankMode
+    Modes.kt                 TopupMode, PiggyBankMode, CashReserve
     EventRecurrence.kt       OneTime, EveryNDays, EveryNMonths
     IncomeEvent.kt
     ExpenseEvent.kt
@@ -223,6 +234,7 @@ fiscal-nest-core/
     BudgetCalculatorTest.kt
     InputValidatorTest.kt
 
+  .github/workflows/ci.yml   build and test on JDK 17 and 21
   build.gradle.kts, settings.gradle.kts, gradlew
   FISCAL_NEST_CORE_LOCKED.md, ARCHITECTURE.md, API.md, GLOSSARY.md, DEVELOPMENT_PLAN.md
   README.md
@@ -241,6 +253,8 @@ The project is a standard Gradle Kotlin/JVM module (Kotlin 2.4, JVM 17 bytecode,
 ./gradlew test                  # tests only
 ./gradlew publishToMavenLocal   # install into ~/.m2 for client integration
 ```
+
+CI runs `./gradlew build` on JDK 17 and 21 for every push to `main` and every pull request.
 
 ### Using it from a client
 
@@ -276,7 +290,7 @@ The engine is **stateless and thread-safe**. All public methods are pure functio
 
 ## Status
 
-**Spec v1.1 is LOCKED** (`FISCAL_NEST_CORE_LOCKED.md`). The engine is implemented and covered by unit tests; documentation and audit steps 7–9 of the development plan are still open. All code must comply with the locked spec — any deviation is treated as a bug.
+**Spec v1.2 is LOCKED** (`FISCAL_NEST_CORE_LOCKED.md`). The engine is implemented and covered by unit tests; documentation and audit steps 7–9 of the development plan are still open. All code must comply with the locked spec — any deviation is treated as a bug.
 
 ---
 

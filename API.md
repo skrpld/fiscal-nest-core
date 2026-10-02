@@ -1,6 +1,6 @@
 # API Contract
 
-> Public API, configuration, and output data structures. Aligned with `FISCAL_NEST_CORE_LOCKED.md` v1.1, which prevails on any conflict.
+> Public API, configuration, and output data structures. Aligned with `FISCAL_NEST_CORE_LOCKED.md` v1.2, which prevails on any conflict.
 
 ---
 
@@ -8,7 +8,7 @@
 
 - **Public API** — everything a client application is allowed to import. Kept intentionally small.
   - `BudgetCalculator` (object)
-  - `EngineConfig`, `CriticalityLevel`, `TopupMode`, `PiggyBankMode`
+  - `EngineConfig`, `CriticalityLevel`, `TopupMode`, `PiggyBankMode`, `CashReserve`
   - `IncomeEvent`, `ExpenseEvent`, `EventRecurrence`
   - `CushionState`
   - `WhatIfInput`, `ForecastInput`
@@ -34,6 +34,7 @@ All behavior is configured through a single `EngineConfig` object passed on ever
 | `piggyBankMode` | `PiggyBankMode` | `PERCENT_OF_REMAINDER` or `FIXED_AMOUNT`. |
 | `piggyBankTarget` | `BigDecimal` | Ratio `0.0–1.0` of the post-cushion remainder, or a fixed amount `>= 0`. |
 | `piggyBankAdmissibilityPct` | `BigDecimal` | `0.0–1.0`. Max share of the post-cushion remainder allocatable to the piggy bank. |
+| `cashReserves` | `Set<CashReserve>` | What the forecast cash view sets aside besides upcoming mandatory expenses (always reserved). Any combination of `CUSHION_TOPUP`, `PIGGY_BANK`, `UPCOMING_OPTIONAL`; may be empty. |
 
 ### 2.2 `CriticalityLevel`
 
@@ -50,7 +51,16 @@ All behavior is configured through a single `EngineConfig` object passed on ever
 ```kotlin
 enum class TopupMode { PERCENT_OF_TARGET, PERCENT_OF_REMAINDER }
 enum class PiggyBankMode { PERCENT_OF_REMAINDER, FIXED_AMOUNT }
+enum class CashReserve { CUSHION_TOPUP, PIGGY_BANK, UPCOMING_OPTIONAL }
 ```
+
+| `CashReserve` | Reserved amount |
+|---------------|-----------------|
+| `CUSHION_TOPUP` | The period's planned `cushionTopup`. |
+| `PIGGY_BANK` | The period's planned `piggyBankActual`. |
+| `UPCOMING_OPTIONAL` | Optional expenses dated after `currentDate`. |
+
+`setOf(CUSHION_TOPUP)` gives the classic conservative daily budget; an empty set reserves mandatory expenses only; all three give the strictest one.
 
 ---
 
@@ -139,7 +149,7 @@ The engine returns **pure data structures**. No localized strings, no emojis, no
 | `cushionCrisis` | `Boolean` | `true` if a criticality level matched the fill ratio (also during an expense crisis). |
 | `cushionOverfilled` | `Boolean` | `true` if the cushion balance exceeds the target. |
 | `piggyBankCappedByAdmissibility` | `Boolean` | `true` if the piggy bank got less than its target; `false` during an expense crisis. |
-| `totalIncome` | `BigDecimal` | Income the distribution started from (in FORECAST: opening balance + all period income). |
+| `totalIncome` | `BigDecimal` | Income the distribution started from (in FORECAST: all period income, minus a carried deficit). |
 | `totalMandatory` | `BigDecimal` | Mandatory expenses. |
 | `totalOptional` | `BigDecimal` | Optional expenses. |
 | `rawRemainder` | `BigDecimal` | `income - mandatory`. |
@@ -170,8 +180,9 @@ Wraps two independent views of the period: the **plan** (`distribution`, whole-p
 | `daysElapsed` | `Int` | Days in `[periodStart, currentDate)`. |
 | `daysRemaining` | `Int` | Days in `[currentDate, periodEnd]`. |
 | `openingBalance` | `BigDecimal` | Previous `closingBalance` (`0` for period 1; negative carries a deficit). |
-| `closingBalance` | `BigDecimal` | `distribution.freeRemainder - cashFlow.alreadySpent`. |
-| `distribution` | `DistributionResult` | Period plan. |
+| `freeBalance` | `BigDecimal` | Free money of the period: `max(openingBalance, 0) + distribution.freeRemainder`. Carried free money stays free; it never reaches the cushion or the piggy bank. |
+| `closingBalance` | `BigDecimal` | `freeBalance - cashFlow.alreadySpent`. |
+| `distribution` | `DistributionResult` | Period plan of this period's own income and expenses; a carried deficit is deducted from its income. |
 | `cashFlow` | `CashFlow` | Cash view. |
 | `dailyMetrics` | `DailyMetrics` | Daily budget figures. |
 
@@ -187,19 +198,19 @@ Wraps two independent views of the period: the **plan** (`distribution`, whole-p
 | `upcomingOptional` | `BigDecimal` | Optional expenses dated `> currentDate`. |
 | `alreadySpent` | `BigDecimal` | Unscheduled spending (period 1 only; `0` afterwards). |
 | `liquidOnHand` | `BigDecimal` | `openingBalance + receivedIncome - paidMandatory - paidOptional - alreadySpent`. |
-| `mustReserve` | `BigDecimal` | `upcomingMandatory`. |
+| `mustReserve` | `BigDecimal` | `upcomingMandatory` plus the reserves selected in `EngineConfig.cashReserves`. |
 | `available` | `BigDecimal` | `liquidOnHand - mustReserve`. May be negative before payday. |
 
 ### 5.4 `DailyMetrics`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `dailyPlan` | `BigDecimal` | Even split: `freeRemainder / daysInPeriod`. |
-| `dailyActual` | `BigDecimal` | Unspent free money per remaining day: `(freeRemainder - alreadySpent) / daysRemaining`. |
-| `dailyCashflow` | `BigDecimal` | Conservative daily budget: `(available - cushionTopup) / daysRemaining`. |
+| `dailyPlan` | `BigDecimal` | Even split: `freeBalance / daysInPeriod`. |
+| `dailyActual` | `BigDecimal` | Unspent free money per remaining day: `(freeBalance - alreadySpent) / daysRemaining`. |
+| `dailyCashflow` | `BigDecimal` | Cash-based daily budget: `available / daysRemaining`. |
 | `burnRate` | `BigDecimal` | Average unscheduled spending so far: `alreadySpent / (daysElapsed + 1)`. |
 
-> **Note:** `dailyCashflow` uses `available` (cash after the mandatory reserve), not `freeRemainder`. This produces a conservative, cash-in-hand daily figure.
+> **Note:** `dailyCashflow` uses `available` (cash after the configured reserves), not `freeBalance`. It is the cash-in-hand daily figure.
 
 ---
 

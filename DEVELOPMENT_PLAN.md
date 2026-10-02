@@ -9,7 +9,7 @@
 | Step | Status |
 |------|--------|
 | 0 — Kick-off | Done |
-| 1 — Locked spec | Done; amended to v1.1 (see `FISCAL_NEST_CORE_LOCKED.md` §0.2) |
+| 1 — Locked spec | Done; amended to v1.2 (see `FISCAL_NEST_CORE_LOCKED.md` §0.2–0.3) |
 | 2 — Data model | Done |
 | 3 — Decimal & input layer | Done |
 | 4 — Calendar engine | Done |
@@ -20,7 +20,7 @@
 | 9 — Final audit | Open: `AUDIT_REPORT.md` and `SAMPLE_USAGE.kt` not written yet |
 | 10 — Unit tests | Done: Gradle build with JUnit Jupiter, tests under `src/test/kotlin` |
 
-The prompts of completed steps are kept for history. Where they differ from `FISCAL_NEST_CORE_LOCKED.md` v1.1 (plan vs cash split, removed fields, carry-forward of `alreadySpent`), the locked spec wins.
+The prompts of completed steps are kept for history. Where they differ from `FISCAL_NEST_CORE_LOCKED.md` v1.2 (plan vs cash split, removed fields, carry-forward, cash reserves), the locked spec wins.
 
 ---
 
