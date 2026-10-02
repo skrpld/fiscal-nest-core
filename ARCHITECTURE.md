@@ -1,6 +1,6 @@
 # Architecture
 
-> Entities, algorithms, business rules, and runtime characteristics. Aligned with `FISCAL_NEST_CORE_LOCKED.md` v1.1, which prevails on any conflict.
+> Entities, algorithms, business rules, and runtime characteristics. Aligned with `FISCAL_NEST_CORE_LOCKED.md` v1.2, which prevails on any conflict.
 
 ---
 
@@ -192,16 +192,18 @@ Every forecast period is calculated twice, and each view treats income and expen
 
 | View | Field | Income | Expenses | Answers |
 |------|-------|--------|----------|---------|
-| **Plan** | `ForecastResult.distribution` | all income of the period + opening balance | all expenses of the period | How should this period's money be allocated? Same rules as WHAT_IF. |
-| **Cash** | `ForecastResult.cashFlow` | received by `currentDate` | paid by `currentDate`; upcoming mandatory reserved | What is safe to spend right now? |
+| **Plan** | `ForecastResult.distribution` | all income of the period (minus a carried deficit) | all expenses of the period | How should this period's new money be allocated? Same rules as WHAT_IF. |
+| **Cash** | `ForecastResult.cashFlow` | received by `currentDate` + opening balance | paid by `currentDate`; upcoming mandatory and the configured reserves set aside | What is safe to spend right now? |
 
 A salary that arrives after the rent is therefore not an expense crisis in the plan, while the cash view still shows the gap until payday (`available` may be negative).
 
 ```
 liquidOnHand = openingBalance + receivedIncome - paidMandatory - paidOptional - alreadySpent
-mustReserve  = upcomingMandatory
+mustReserve  = upcomingMandatory + reserves selected in EngineConfig.cashReserves
 available    = liquidOnHand - mustReserve
 ```
+
+`EngineConfig.cashReserves` lets the client decide how conservative the cash view is: reserve the planned cushion top-up (`CUSHION_TOPUP`), the planned piggy bank amount (`PIGGY_BANK`), upcoming optional expenses (`UPCOMING_OPTIONAL`), any combination, or none. Upcoming mandatory expenses are always reserved.
 
 - `alreadySpent` is **unscheduled** spending (not covered by expense events), taken from `ForecastInput` for the **first period only**. Later periods are fully in the future, so it is `0`.
 - Liquidity is computed by `BudgetCalculator`; it is **not** passed into `DistributionEngine`.
@@ -210,12 +212,14 @@ available    = liquidOnHand - mustReserve
 The engine accepts a forecast horizon (`forecastPeriods`). It builds the chain of periods, carries state between them, and returns one result per period.
 
 **Carry-forward rules:**
-1. **Opening Balance:** Period 1 has `openingBalance = 0`. Period N (N > 1) has `openingBalance = closingBalance` of period N-1, where `closingBalance = freeRemainder - alreadySpent`. A negative value carries a deficit into the next plan.
+1. **Opening Balance:** Period 1 has `openingBalance = 0`. Period N (N > 1) has `openingBalance = closingBalance` of period N-1, where `freeBalance = max(openingBalance, 0) + freeRemainder` and `closingBalance = freeBalance - alreadySpent`.
+   - A **positive** opening balance stays free money. It is not part of the next plan's income, so it is never redistributed to the cushion or the piggy bank; it is added to `freeBalance`.
+   - A **negative** opening balance is a deficit. It is deducted from the next plan's income, so it is covered before any cushion top-up or piggy bank allocation.
 2. **Cushion State:** After each period: `nextCushionCurrent = cushionCurrent(post-distribution) = cushionCurrent(input) + cushionTopup`.
 3. **Already Spent:** Applies only to period 1. For N > 1, `alreadySpent = 0` and `currentDate = periodStart`, therefore `daysElapsed = 0` and `daysRemaining = daysInPeriod`.
-4. **Income for Distribution:** `openingBalance + receivedIncome + pendingIncome` of the period.
+4. **Income for Distribution:** `min(openingBalance, 0) + receivedIncome + pendingIncome` of the period.
 
-> Future periods assume no unscheduled spending, so unspent free remainder accumulates from period to period. The projection shows the most that can be carried forward, not a spending forecast.
+> Future periods assume no unscheduled spending, so unspent free money accumulates in `freeBalance` from period to period. The projection shows the most that can be carried forward, not a spending forecast.
 
 **Forecast Result Composition:**
 `ForecastResult` does **not** inherit from `DistributionResult`. It **contains** a `DistributionResult` (plan), a `CashFlow` (cash view), daily metrics, period boundaries and balance carry-forward fields.

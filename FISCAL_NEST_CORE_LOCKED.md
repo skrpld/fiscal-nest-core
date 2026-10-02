@@ -1,6 +1,6 @@
 # FISCAL_NEST_CORE_LOCKED.md
 
-> **Status: LOCKED — v1.1**
+> **Status: LOCKED — v1.2**
 > This document is the single source of truth for the engine.
 > No further edits without a formal amendment process (a documented reason in §0, approved by the project owner).
 > Supersedes README.md / ARCHITECTURE.md / API.md / GLOSSARY.md wherever they conflict with this document.
@@ -26,12 +26,19 @@
 |---|-------|------------|--------|
 | 1 | Plan vs cash split in FORECAST | The period **plan** (`distribution`) counts every event of the period for income **and** expenses. The **cash view** (`cashFlow`) splits income **and** expenses by date at `currentDate`. | v1.0 compared received income only against full-period expenses: a salary due after the rent produced a false expense crisis. Owner decision: if income is counted by date, expenses must be too. |
 | 2 | Paid expenses in liquidity | `liquidOnHand` subtracts `paidMandatory` and `paidOptional`. | v1.0 ignored expenses already paid and overstated cash on hand. |
-| 3 | `alreadySpent` | Defined as **unscheduled** spending (not covered by expense events). `closingBalance = freeRemainder - alreadySpent`; `dailyActual = (freeRemainder - alreadySpent) / daysRemaining`. | v1.0 carried money already spent into the next period and kept budgeting it per day. |
+| 3 | `alreadySpent` | Defined as **unscheduled** spending (not covered by expense events). `closingBalance = freeRemainder - alreadySpent`; `dailyActual = (freeRemainder - alreadySpent) / daysRemaining`. *Refined by v1.2 #1.* | v1.0 carried money already spent into the next period and kept budgeting it per day. |
 | 4 | Unused API removed | `IncomeEvent.isReliable`, event `name` / `category`, `WhatIfInput.alreadySpent`, recurrence `startDate` / `OneTime.date`, `DecimalUtils.sum`, `buildSnapshot(alreadySpent)`. `PeriodSnapshot` is internal. | Never read by the engine, duplicated by another field, or unreachable from the public API. |
 | 5 | Period chaining | Periods spanning whole months chain by months anchored at the first `periodStart`; others chain by the first period's length in days. | Fixed day lengths drifted off calendar months (Aug 1–31 was followed by Sep 1 – Oct 1). |
 | 6 | Money quantization | Inputs are quantized to `moneyScale`; each allocation is quantized when decided. | Quantizing every result field independently could break `netRemainder = topup + piggy + free` by one unit. |
 | 7 | Validation | One implementation (`InputValidator`) used by constructors and by `BudgetCalculator`; new rules in §9. | Duplicated checks had already diverged; `BigDecimal` `==` is scale-sensitive; unbounded exponents allowed a denial of service. |
 | 8 | Recommended `percentageScale` | `4` (two decimals once displayed as `0–100`). | With the `0.0–1.0` scale, `percentageScale = 1` rounds `0.25` to `0.3`. |
+
+### 0.3 v1.2 — owner decisions
+
+| # | Topic | Resolution | Reason |
+|---|-------|------------|--------|
+| 1 | Carried free balance | A positive `openingBalance` stays free money: it is **not** part of the next plan's income and never reaches the cushion or the piggy bank. `freeBalance = max(openingBalance, 0) + freeRemainder`; `closingBalance = freeBalance - alreadySpent`; daily plan and actual use `freeBalance`. A negative `openingBalance` (deficit) is still deducted from the plan's income, so it is covered before the cushion and the piggy bank. | Owner decision: free remainder carried into later periods must remain free remainder and must not be moved into the piggy bank. Supersedes the carry rule of v1.1 #3. |
+| 2 | Cash reserves | `EngineConfig.cashReserves: Set<CashReserve>` selects what the cash view sets aside besides upcoming mandatory expenses: `CUSHION_TOPUP`, `PIGGY_BANK`, `UPCOMING_OPTIONAL`. `mustReserve` includes them; `dailyCashflow = available / daysRemaining`. | Owner decision: the engine must be universal; what a conservative daily budget reserves is the client's choice. `setOf(CUSHION_TOPUP)` reproduces the v1.1 `dailyCashflow`. |
 
 ---
 
@@ -66,7 +73,8 @@ data class EngineConfig(
     val criticalityLevels: List<CriticalityLevel>, // non-empty, sorted by maxFillPct ascending, no duplicates
     val piggyBankMode: PiggyBankMode,
     val piggyBankTarget: BigDecimal,               // >= 0; ratio 0.0-1.0 if PERCENT_OF_REMAINDER, amount if FIXED_AMOUNT
-    val piggyBankAdmissibilityPct: BigDecimal      // 0.0-1.0
+    val piggyBankAdmissibilityPct: BigDecimal,     // 0.0-1.0
+    val cashReserves: Set<CashReserve>             // reserved in the cash view besides upcoming mandatory; may be empty
 )
 
 data class CriticalityLevel(
@@ -79,6 +87,7 @@ data class CriticalityLevel(
 
 enum class TopupMode { PERCENT_OF_TARGET, PERCENT_OF_REMAINDER }
 enum class PiggyBankMode { PERCENT_OF_REMAINDER, FIXED_AMOUNT }
+enum class CashReserve { CUSHION_TOPUP, PIGGY_BANK, UPCOMING_OPTIONAL }
 ```
 
 > **Percentage scale rule (binding, no exceptions):** every percentage-like field — `maxFillPct`, `topupValue`, `admissibilityPct`, `piggyBankAdmissibilityPct`, `piggyBankTarget` (in `PERCENT_OF_REMAINDER` mode), and `cushionFillPct` in the output — is a ratio on the `0.0–1.0` scale. Calculations always use ratios. Converting to a `0–100` display value is entirely a client concern.
@@ -174,7 +183,8 @@ data class ForecastResult(
     val daysElapsed: Int,
     val daysRemaining: Int,
     val openingBalance: BigDecimal,         // previous closingBalance; 0 for period 1
-    val closingBalance: BigDecimal,         // distribution.freeRemainder - cashFlow.alreadySpent
+    val freeBalance: BigDecimal,            // max(openingBalance, 0) + distribution.freeRemainder
+    val closingBalance: BigDecimal,         // freeBalance - cashFlow.alreadySpent
     val distribution: DistributionResult,   // PLAN: whole-period totals (composition, NOT inheritance — see §4)
     val cashFlow: CashFlow,                 // CASH: by date as of currentDate
     val dailyMetrics: DailyMetrics
@@ -189,14 +199,14 @@ data class CashFlow(
     val upcomingOptional: BigDecimal,   // optional expenses dated > currentDate
     val alreadySpent: BigDecimal,       // period 1 only; 0 for N > 1
     val liquidOnHand: BigDecimal,       // openingBalance + receivedIncome - paidMandatory - paidOptional - alreadySpent
-    val mustReserve: BigDecimal,        // = upcomingMandatory
+    val mustReserve: BigDecimal,        // upcomingMandatory + reserves selected in EngineConfig.cashReserves
     val available: BigDecimal           // liquidOnHand - mustReserve
 )
 
 data class DailyMetrics(
-    val dailyPlan: BigDecimal,      // freeRemainder / daysInPeriod
-    val dailyActual: BigDecimal,    // (freeRemainder - alreadySpent) / daysRemaining
-    val dailyCashflow: BigDecimal,  // (available - cushionTopup) / daysRemaining
+    val dailyPlan: BigDecimal,      // freeBalance / daysInPeriod
+    val dailyActual: BigDecimal,    // (freeBalance - alreadySpent) / daysRemaining
+    val dailyCashflow: BigDecimal,  // available / daysRemaining
     val burnRate: BigDecimal        // alreadySpent / (daysElapsed + 1)
 )
 ```
@@ -330,7 +340,7 @@ Invariant: `netRemainder == cushionTopup + piggyBankActual + freeRemainder` exac
 
 ### 7.2 Plan vs cash (binding, v1.1 #1)
 
-- **Plan:** `distribute(income = openingBalance + receivedIncome + pendingIncome, mandatory = paidMandatory + upcomingMandatory, optional = paidOptional + upcomingOptional)`. Income and expenses are compared on the same whole-period basis, exactly like WHAT_IF.
+- **Plan:** `distribute(income = min(openingBalance, 0) + receivedIncome + pendingIncome, mandatory = paidMandatory + upcomingMandatory, optional = paidOptional + upcomingOptional)`. Income and expenses are compared on the same whole-period basis, exactly like WHAT_IF. A carried deficit is covered first; a carried free balance is not redistributed (v1.2 #1).
 - **Cash:** both income and expenses are split by date (§7.5). It answers "what is safe to spend right now".
 
 ### 7.3 Recurrence resolution
@@ -345,7 +355,7 @@ Occurrences are counted arithmetically; cost does not depend on how far in the p
 
 ### 7.4 Multi-period carry-forward (binding)
 
-1. **Opening balance:** period 1 → `0`. Period `N > 1` → `closingBalance` of period `N-1`, where `closingBalance = freeRemainder - alreadySpent`. A negative value carries a deficit.
+1. **Opening balance:** period 1 → `0`. Period `N > 1` → `closingBalance` of period `N-1`, where `freeBalance = max(openingBalance, 0) + freeRemainder` and `closingBalance = freeBalance - alreadySpent`. A positive value stays free money of the next period; a negative value is a deficit the next plan covers first.
 2. **Cushion state:** period `N > 1` uses `cushionState.current = distribution.cushionCurrent` of period `N-1`; the target is unchanged.
 3. **Already spent:** period 1 only. For `N > 1`, `alreadySpent = 0`, `currentDate = periodStart`, so `daysElapsed = 0` and `daysRemaining = daysInPeriod`.
 4. **Period boundaries:** let `nextStart = periodEnd + 1 day` of the first period and `m` the number of months from `periodStart` to `nextStart`. If `m >= 1` and `periodStart + m months == nextStart`, period `k` is `[periodStart + k*m months, periodStart + (k+1)*m months - 1 day]`. Otherwise every period has the first period's length in days.
@@ -355,6 +365,9 @@ Occurrences are counted arithmetically; cost does not depend on how far in the p
 ```
 liquidOnHand = openingBalance + receivedIncome - paidMandatory - paidOptional - alreadySpent
 mustReserve  = upcomingMandatory
+             + cushionTopup        if CUSHION_TOPUP in cashReserves
+             + piggyBankActual     if PIGGY_BANK in cashReserves
+             + upcomingOptional    if UPCOMING_OPTIONAL in cashReserves
 available    = liquidOnHand - mustReserve
 ```
 
@@ -366,12 +379,12 @@ Computed only in FORECAST mode; each quotient is rounded to `moneyScale` with `r
 
 | Metric | Formula |
 |--------|---------|
-| `dailyPlan` | `freeRemainder / daysInPeriod` |
-| `dailyActual` | `(freeRemainder - alreadySpent) / daysRemaining` |
-| `dailyCashflow` | `(available - cushionTopup) / daysRemaining` |
+| `dailyPlan` | `freeBalance / daysInPeriod` |
+| `dailyActual` | `(freeBalance - alreadySpent) / daysRemaining` |
+| `dailyCashflow` | `available / daysRemaining` |
 | `burnRate` | `alreadySpent / (daysElapsed + 1)` |
 
-`dailyCashflow` deliberately uses `available` (cash after reserving upcoming mandatory expenses), not `freeRemainder` — it is the conservative, cash-in-hand figure and may be negative before payday.
+`dailyCashflow` deliberately uses `available` (cash after the configured reserves), not `freeBalance` — it is the cash-in-hand figure and may be negative before payday.
 
 ---
 
@@ -414,5 +427,5 @@ Code, KDoc, and all Markdown technical documentation for the engine remain **Eng
 
 ---
 
-**LOCKED — v1.1**
+**LOCKED — v1.2**
 No further edits are permitted without a formal amendment process.

@@ -25,6 +25,8 @@ import java.math.RoundingMode
  * [PiggyBankMode.PERCENT_OF_REMAINDER], or a non-negative amount for [PiggyBankMode.FIXED_AMOUNT]
  * @property piggyBankAdmissibilityPct largest share, `0.0..1.0`, of the post-cushion remainder
  * that may go to the piggy bank
+ * @property cashReserves what the forecast cash view sets aside from cash on hand besides upcoming
+ * mandatory expenses; an empty set reserves upcoming mandatory expenses only
  * @throws IllegalArgumentException if any property violates the rules above
  * @see CriticalityLevel
  */
@@ -35,7 +37,8 @@ data class EngineConfig(
     val criticalityLevels: List<CriticalityLevel>,
     val piggyBankMode: PiggyBankMode,
     val piggyBankTarget: BigDecimal,
-    val piggyBankAdmissibilityPct: BigDecimal
+    val piggyBankAdmissibilityPct: BigDecimal,
+    val cashReserves: Set<CashReserve>
 ) {
     init {
         InputValidator.validateConfig(this)

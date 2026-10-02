@@ -71,13 +71,15 @@ class BudgetCalculatorTest {
         assertDecimal("20000", first.distribution.totalMandatory)
         assertDecimal("4000", first.distribution.cushionTopup)
         assertDecimal("21000", first.distribution.freeRemainder)
+        assertDecimal("21000", first.freeBalance)
 
         assertDecimal("50000", first.cashFlow.receivedIncome)
         assertDecimal("20000", first.cashFlow.paidMandatory)
         assertDecimal("0", first.cashFlow.upcomingMandatory)
         assertDecimal("3500", first.cashFlow.alreadySpent)
         assertDecimal("26500", first.cashFlow.liquidOnHand)
-        assertDecimal("26500", first.cashFlow.available)
+        assertDecimal("4000", first.cashFlow.mustReserve)
+        assertDecimal("22500", first.cashFlow.available)
         assertDecimal("17500", first.closingBalance)
 
         assertDecimal("677.42", first.dailyMetrics.dailyPlan)
@@ -100,23 +102,27 @@ class BudgetCalculatorTest {
         assertEquals(30, second.daysRemaining)
         assertDecimal(first.closingBalance.toPlainString(), second.openingBalance)
         assertDecimal("0", second.cashFlow.alreadySpent)
-        assertDecimal("67500", second.distribution.totalIncome)
+        assertDecimal("50000", second.distribution.totalIncome)
         assertDecimal("0.45", second.distribution.cushionFillPct)
         assertEquals("Warning", second.distribution.activeCriticalityLevel)
-        assertDecimal("4750", second.distribution.cushionTopup)
-        assertDecimal("13750", second.distribution.cushionCurrent)
-        assertDecimal("37750", second.closingBalance)
-        assertDecimal("20000", second.cashFlow.mustReserve)
-        assertDecimal("47500", second.cashFlow.available)
-        assertDecimal("1425", second.dailyMetrics.dailyCashflow)
+        assertDecimal("3000", second.distribution.cushionTopup)
+        assertDecimal("12000", second.distribution.cushionCurrent)
+        assertDecimal("22000", second.distribution.freeRemainder)
+        assertDecimal("39500", second.freeBalance)
+        assertDecimal("39500", second.closingBalance)
+        assertDecimal("67500", second.cashFlow.liquidOnHand)
+        assertDecimal("23000", second.cashFlow.mustReserve)
+        assertDecimal("44500", second.cashFlow.available)
+        assertDecimal("1483.33", second.dailyMetrics.dailyCashflow)
+        assertDecimal("1316.67", second.dailyMetrics.dailyPlan)
         assertDecimal("0", second.dailyMetrics.burnRate)
 
         assertEquals(date(2026, 10, 1), third.periodStart)
         assertEquals(date(2026, 10, 31), third.periodEnd)
-        assertDecimal("37750", third.openingBalance)
-        assertDecimal("6250", third.distribution.cushionTopup)
-        assertDecimal("20000", third.distribution.cushionCurrent)
-        assertDecimal("56500", third.closingBalance)
+        assertDecimal("39500", third.openingBalance)
+        assertDecimal("3000", third.distribution.cushionTopup)
+        assertDecimal("15000", third.distribution.cushionCurrent)
+        assertDecimal("61500", third.closingBalance)
     }
 
     /**
@@ -133,9 +139,78 @@ class BudgetCalculatorTest {
         assertDecimal("50000", first.distribution.totalIncome)
         assertDecimal("0", first.cashFlow.receivedIncome)
         assertDecimal("50000", first.cashFlow.pendingIncome)
-        assertDecimal("20000", first.cashFlow.mustReserve)
-        assertDecimal("-20000", first.cashFlow.available)
+        assertDecimal("24000", first.cashFlow.mustReserve)
+        assertDecimal("-24000", first.cashFlow.available)
         assertTrue(first.dailyMetrics.dailyCashflow.signum() < 0)
+    }
+
+    /**
+     * Carried free money stays free: it is not redistributed to the cushion or the piggy bank.
+     */
+    @Test
+    fun `keeps a carried free balance out of the piggy bank and the cushion`() {
+        val greedy = config(
+            criticalityLevels = listOf(level("Always", "1", TopupMode.PERCENT_OF_REMAINDER, "0.10", "1")),
+            piggyBankMode = PiggyBankMode.PERCENT_OF_REMAINDER,
+            piggyBankTarget = "0.50",
+            piggyBankAdmissibilityPct = "1"
+        )
+        val (first, second) = BudgetCalculator.calculateForecast(
+            ForecastInput(
+                incomeEvents = listOf(salaryOnThe1st),
+                expenseEvents = listOf(rentOnThe5th),
+                periodStart = date(2026, 8, 1),
+                periodEnd = date(2026, 8, 31),
+                currentDate = date(2026, 8, 1),
+                alreadySpent = dec("0"),
+                forecastPeriods = 2,
+                config = greedy,
+                cushionState = cushion("0", "1000000")
+            )
+        )
+        assertDecimal("3000", first.distribution.cushionTopup)
+        assertDecimal("13500", first.distribution.piggyBankActual)
+        assertDecimal("13500", first.closingBalance)
+
+        assertDecimal("13500", second.openingBalance)
+        assertDecimal("50000", second.distribution.totalIncome)
+        assertDecimal("3000", second.distribution.cushionTopup)
+        assertDecimal("13500", second.distribution.piggyBankActual)
+        assertDecimal("27000", second.freeBalance)
+    }
+
+    /**
+     * The cash view reserves upcoming mandatory expenses always and everything else only on request.
+     */
+    @Test
+    fun `reserves only the configured amounts in the cash view`() {
+        val cinema = ExpenseEvent("cinema", dec("700"), false, EventRecurrence.OneTime, date(2026, 8, 25), null)
+        fun firstPeriod(reserves: Set<CashReserve>): ForecastResult = BudgetCalculator.calculateForecast(
+            ForecastInput(
+                incomeEvents = listOf(salaryOnThe1st),
+                expenseEvents = listOf(rentOnThe5th, cinema),
+                periodStart = date(2026, 8, 1),
+                periodEnd = date(2026, 8, 31),
+                currentDate = date(2026, 8, 7),
+                alreadySpent = dec("3500"),
+                forecastPeriods = 1,
+                config = config(cashReserves = reserves),
+                cushionState = cushion("5000", "20000")
+            )
+        ).single()
+
+        val bare = firstPeriod(emptySet())
+        assertDecimal("26500", bare.cashFlow.liquidOnHand)
+        assertDecimal("0", bare.cashFlow.mustReserve)
+        assertDecimal("26500", bare.cashFlow.available)
+        assertDecimal("1060", bare.dailyMetrics.dailyCashflow)
+
+        val strict = firstPeriod(setOf(CashReserve.CUSHION_TOPUP, CashReserve.PIGGY_BANK, CashReserve.UPCOMING_OPTIONAL))
+        assertDecimal("4000", strict.distribution.cushionTopup)
+        assertDecimal("5000", strict.distribution.piggyBankActual)
+        assertDecimal("9700", strict.cashFlow.mustReserve)
+        assertDecimal("16800", strict.cashFlow.available)
+        assertDecimal("672", strict.dailyMetrics.dailyCashflow)
     }
 
     /**
@@ -151,6 +226,8 @@ class BudgetCalculatorTest {
         assertDecimal("-5000", second.openingBalance)
         assertDecimal("5000", second.distribution.totalIncome)
         assertDecimal("10000", second.distribution.expenseDeficit)
+        assertDecimal("-10000", second.freeBalance)
+        assertDecimal("-10000", second.closingBalance)
     }
 
     /**

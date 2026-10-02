@@ -50,7 +50,8 @@ internal fun config(
     piggyBankAdmissibilityPct: String = "0.80",
     moneyScale: Int = 2,
     percentageScale: Int = 4,
-    roundingMode: RoundingMode = RoundingMode.HALF_UP
+    roundingMode: RoundingMode = RoundingMode.HALF_UP,
+    cashReserves: Set<CashReserve> = setOf(CashReserve.CUSHION_TOPUP)
 ): EngineConfig = EngineConfig(
     roundingMode = roundingMode,
     moneyScale = moneyScale,
@@ -58,7 +59,8 @@ internal fun config(
     criticalityLevels = criticalityLevels,
     piggyBankMode = piggyBankMode,
     piggyBankTarget = dec(piggyBankTarget),
-    piggyBankAdmissibilityPct = dec(piggyBankAdmissibilityPct)
+    piggyBankAdmissibilityPct = dec(piggyBankAdmissibilityPct),
+    cashReserves = cashReserves
 )
 
 /**
