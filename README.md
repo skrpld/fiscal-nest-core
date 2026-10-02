@@ -16,9 +16,9 @@ It can be plugged into:
 - Android apps (`fiscal-nest-mobile`)
 - Server-side services (JVM / Ktor / Spring)
 - CLI tools
-- Any JVM-compatible runtime
+- Any JVM 17+ runtime
 
-The engine is **pure business logic and stateless**. It does not render messages, store state, or assume a presentation layer. All localization, currency formatting, emoji usage, database persistence, and manual-adjustment workflows are the responsibility of the **client implementation**.
+The engine is **pure business logic and stateless**. It does not render messages, store state, or assume a presentation layer. All localization, currency formatting, emoji usage, database persistence, display data (event names, categories) and manual-adjustment workflows are the responsibility of the **client implementation**.
 
 > **Golden Rule:** The engine must never import Android SDK, HTTP clients, locale-specific formatters, logging frameworks, or any platform-specific code. All behavior is configured through the public API.
 
@@ -28,27 +28,38 @@ The engine is **pure business logic and stateless**. It does not render messages
 
 | Mode | Codename | Description |
 |------|----------|-------------|
-| **Light** | `WHAT_IF` | Snapshot calculation. Aggregate amounts in, distribution out. No dates required. |
-| **Heavy** | `FORECAST` | Calendar-aware multi-period projection. Dated events with recurrence rules, daily metrics, carry-forward between periods. |
+| **Light** | `WHAT_IF` | Snapshot calculation. Aggregate amounts in, distribution out. No dates. |
+| **Heavy** | `FORECAST` | Calendar-aware multi-period projection from dated, recurring events. Each period gets a **plan** and a **cash view**, daily metrics, and carry-forward into the next period. |
+
+In `FORECAST` mode income and expenses are always treated the same way:
+
+| View | Field | Counts | Answers |
+|------|-------|--------|---------|
+| **Plan** | `distribution` | every income and expense of the period, whatever its date | How should this period's money be allocated? (same rules as `WHAT_IF`) |
+| **Cash** | `cashFlow` | income received and expenses paid by `currentDate`; upcoming mandatory expenses are reserved | What is safe to spend right now? |
+
+A salary that arrives after the rent is therefore not an expense crisis in the plan, while the cash view still shows the gap until payday.
+
+All percentage-like values are **ratios on the `0.0–1.0` scale** (`0.25` = 25%). Showing `0–100` is up to the client.
 
 ---
 
 ## Quick Start
 
-The snippets below are **illustrative examples**. They show how a client application calls the engine. The engine itself never prints, logs, or formats output.
+The snippets below show how a client application calls the engine. The engine itself never prints, logs, or formats output.
 
-### WHAT_IF — Snapshot Calculation
+### Configuration
 
 ```kotlin
 import fiscalnest.core.*
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.LocalDate
 
-// 1. Configure the engine
 val config = EngineConfig(
     roundingMode = RoundingMode.HALF_UP,
     moneyScale = 2,
-    percentageScale = 1,
+    percentageScale = 4,
     criticalityLevels = listOf(
         CriticalityLevel(
             name = "Critical",
@@ -69,60 +80,52 @@ val config = EngineConfig(
     piggyBankTarget = BigDecimal("5000"),
     piggyBankAdmissibilityPct = BigDecimal("0.80")
 )
+```
 
-// 2. Light mode — snapshot calculation
+### WHAT_IF — Snapshot Calculation
+
+```kotlin
 val result = BudgetCalculator.calculateWhatIf(
     WhatIfInput(
         income = BigDecimal("50000"),
         mandatory = BigDecimal("20000"),
         optional = BigDecimal("10000"),
-        cushionState = CushionState(
-            current = BigDecimal("5000"),
-            target = BigDecimal("20000")
-        ),
-        alreadySpent = BigDecimal.ZERO,
+        cushionState = CushionState(current = BigDecimal("5000"), target = BigDecimal("20000")),
         config = config
     )
 )
 
-// 3. Inspect pure data output
-println(result.expenseCrisis)      // false
-println(result.cushionCrisis)      // true
-println(result.cushionTopup)       // BigDecimal("4000.00")
-println(result.piggyBankActual)    // BigDecimal("2400.00")
-println(result.freeRemainder)      // BigDecimal("13600.00")
-println(result.cushionCurrent)     // BigDecimal("9000.00") — post-distribution
+result.expenseCrisis       // false
+result.cushionCrisis       // true, level "Critical": fill ratio 0.25 < 0.30
+result.cushionFillPct      // 0.2500 (before distribution)
+result.cushionTopup        // 4000.00 = min(20% of target, 80% of 20000, need 15000)
+result.cushionCurrent      // 9000.00 (after distribution)
+result.piggyBankActual     // 5000.00 = min(5000, 80% of 16000)
+result.freeRemainder       // 11000.00
 ```
 
 ### FORECAST — Multi-Period Projection
 
 ```kotlin
-import java.time.LocalDate
-
 val forecast = BudgetCalculator.calculateForecast(
     ForecastInput(
         incomeEvents = listOf(
             IncomeEvent(
                 id = "salary",
-                name = "Salary",
                 amount = BigDecimal("50000"),
-                recurrence = EventRecurrence.EveryNMonths(1, 1, LocalDate.of(2026, 1, 1)),
+                recurrence = EventRecurrence.EveryNMonths(n = 1, dayOfMonth = 1),
                 startDate = LocalDate.of(2026, 1, 1),
-                endDate = null,
-                category = "work",
-                isReliable = true
+                endDate = null
             )
         ),
         expenseEvents = listOf(
             ExpenseEvent(
                 id = "rent",
-                name = "Rent",
                 amount = BigDecimal("20000"),
                 isMandatory = true,
-                recurrence = EventRecurrence.EveryNMonths(1, 5, LocalDate.of(2026, 1, 5)),
+                recurrence = EventRecurrence.EveryNMonths(n = 1, dayOfMonth = 5),
                 startDate = LocalDate.of(2026, 1, 5),
-                endDate = null,
-                category = "housing"
+                endDate = null
             )
         ),
         periodStart = LocalDate.of(2026, 8, 1),
@@ -135,25 +138,28 @@ val forecast = BudgetCalculator.calculateForecast(
     )
 )
 
-// Inspect the first period
-val period1 = forecast[0]
-println(period1.periodStart)               // 2026-08-01
-println(period1.openingBalance)            // 0
-println(period1.distribution.freeRemainder) // free remainder after distribution
-println(period1.dailyMetrics.dailyCashflow) // conservative daily budget
-println(period1.closingBalance)            // carried to next period
+val august = forecast[0]
+august.distribution.freeRemainder  // 21000.00  plan: 50000 - 20000 - 4000 cushion - 5000 piggy
+august.cashFlow.paidMandatory      // 20000.00  rent of Aug 5 is already paid
+august.cashFlow.available          // 26500.00  50000 - 20000 - 3500 already spent
+august.closingBalance              // 17500.00  21000 - 3500, carried into September
+august.dailyMetrics.dailyActual    // 700.00    17500 / 25 remaining days
+august.dailyMetrics.dailyCashflow  // 900.00    (26500 - 4000 cushion) / 25
+
+forecast[1].periodStart            // 2026-09-01 (periods follow calendar months)
+forecast[1].periodEnd              // 2026-09-30
+forecast[1].openingBalance         // 17500.00
 ```
 
----
+### Recurrence
 
-## Documentation
+| Pattern | Occurs |
+|---------|--------|
+| `EventRecurrence.OneTime` | once, on the event's `startDate` |
+| `EventRecurrence.EveryNDays(n)` | `startDate`, then every `n` days |
+| `EventRecurrence.EveryNMonths(n, dayOfMonth)` | the first `dayOfMonth` on or after `startDate`, then every `n` months; `31` means "end of month" |
 
-| Document | What's inside |
-|----------|---------------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Entities, Remainder Hierarchy, Distribution Algorithm, Crisis Scenarios, Criticality Levels, Calendar Logic, Thread Safety, Error Handling |
-| [docs/API.md](docs/API.md) | Public API contract, Configuration, Output data structures, Daily Metrics, Exception Reference, Visibility & Module Boundaries |
-| [docs/GLOSSARY.md](docs/GLOSSARY.md) | Definitions of all business terms |
-| [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) | Step-by-step implementation guide with self-contained prompts for each chat session |
+Every occurrence stays within the event's `[startDate, endDate]`.
 
 ---
 
@@ -177,6 +183,20 @@ Post-Cushion Remainder
   = Free Remainder      <- source for daily budget
 ```
 
+The allocations always add up exactly: `Net Remainder = Cushion Top-up + Piggy Bank + Free Remainder`.
+
+---
+
+## Documentation
+
+| Document | What's inside |
+|----------|---------------|
+| [FISCAL_NEST_CORE_LOCKED.md](FISCAL_NEST_CORE_LOCKED.md) | **Single source of truth** (spec v1.1): exact types, algorithm, formulas, validation messages, amendment log |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Entities, Remainder Hierarchy, Crisis Scenarios, Criticality Levels, Calendar Logic, Plan vs Cash, Thread Safety, Error Handling |
+| [API.md](API.md) | Public API contract, Configuration, Output data structures, Daily Metrics, Exception Reference |
+| [GLOSSARY.md](GLOSSARY.md) | Definitions of all business terms |
+| [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Step-by-step implementation guide and progress |
+
 ---
 
 ## Project Structure
@@ -184,39 +204,27 @@ Post-Cushion Remainder
 ```
 fiscal-nest-core/
   src/main/kotlin/fiscalnest/core/
-    // Public API — data classes & enums
-    EngineConfig.kt
-    CriticalityLevel.kt
-    TopupMode.kt
-    PiggyBankMode.kt
+    BudgetCalculator.kt      public facade
+    EngineConfig.kt          EngineConfig, CriticalityLevel
+    Modes.kt                 TopupMode, PiggyBankMode
+    EventRecurrence.kt       OneTime, EveryNDays, EveryNMonths
     IncomeEvent.kt
     ExpenseEvent.kt
-    EventRecurrence.kt
-    CushionState.kt
-    WhatIfInput.kt
-    ForecastInput.kt
-    DistributionResult.kt
-    ForecastResult.kt
-    PeriodSnapshot.kt
-    DailyMetrics.kt
-    BudgetCalculator.kt          // Public facade
-
-    // Internal implementation
-    DistributionEngine.kt        // internal
-    CalendarEngine.kt            // internal
-    DecimalUtils.kt              // internal
-    InputValidator.kt            // internal
+    Inputs.kt                CushionState, WhatIfInput, ForecastInput
+    Results.kt               DistributionResult, ForecastResult, CashFlow, DailyMetrics
+    DistributionEngine.kt    internal: remainder hierarchy
+    CalendarEngine.kt        internal: recurrences, PeriodSnapshot, PeriodSchedule
+    DecimalUtils.kt          internal: quantization
+    InputValidator.kt        internal: all validation rules
 
   src/test/kotlin/fiscalnest/core/
     DistributionEngineTest.kt
     CalendarEngineTest.kt
     BudgetCalculatorTest.kt
+    InputValidatorTest.kt
 
-  docs/
-    ARCHITECTURE.md
-    API.md
-    GLOSSARY.md
-    DEVELOPMENT_PLAN.md
+  build.gradle.kts, settings.gradle.kts, gradlew
+  FISCAL_NEST_CORE_LOCKED.md, ARCHITECTURE.md, API.md, GLOSSARY.md, DEVELOPMENT_PLAN.md
   README.md
   LICENSE
   NOTICE
@@ -226,24 +234,25 @@ fiscal-nest-core/
 
 ## Building & Testing
 
-The project is a standard Gradle Kotlin/JVM module.
+The project is a standard Gradle Kotlin/JVM module (Kotlin 2.4, JVM 17 bytecode, JUnit Jupiter). Building requires JDK 17 or newer.
 
 ```bash
-# Build
-./gradlew build
-
-# Run tests
-./gradlew test
-
-# Publish to local Maven (for client integration)
-./gradlew publishToMavenLocal
+./gradlew build                 # compile and run all tests
+./gradlew test                  # tests only
+./gradlew publishToMavenLocal   # install into ~/.m2 for client integration
 ```
 
-### Gradle Dependencies (client)
+### Using it from a client
+
+The library is not published to Maven Central yet. After `publishToMavenLocal`:
 
 ```kotlin
+repositories {
+    mavenLocal()
+}
+
 dependencies {
-    implementation("io.github.skrpld:fiscal-nest-core:1.0.0")
+    implementation("io.github.skrpld:fiscal-nest-core:0.1.0-SNAPSHOT")
 }
 ```
 
@@ -255,10 +264,19 @@ The engine is **stateless and thread-safe**. All public methods are pure functio
 
 ---
 
+## Input Safety
+
+- Every input is validated before any calculation; failures throw `IllegalArgumentException` with a stable message (see `FISCAL_NEST_CORE_LOCKED.md` §9).
+- Constructors validate, and `BudgetCalculator` validates again, so instances created by reflection-based deserializers (Gson, Jackson) are checked too.
+- Decimals with more than 1000 integer or fractional digits (e.g. `1E+999999999`) are rejected: quantizing them would exhaust memory.
+- Recurrences are counted arithmetically, so an event anchored far in the past does not slow the engine down.
+- The cost and size of a forecast grow linearly with `forecastPeriods` and the number of events. If a server passes user input through, bound those two values.
+
+---
+
 ## Status
 
-**Spec v1.0 is LOCKED.**  
-All code must comply with the documents above. Any deviation is treated as a bug.
+**Spec v1.1 is LOCKED** (`FISCAL_NEST_CORE_LOCKED.md`). The engine is implemented and covered by unit tests; documentation and audit steps 7–9 of the development plan are still open. All code must comply with the locked spec — any deviation is treated as a bug.
 
 ---
 
