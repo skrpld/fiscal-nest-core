@@ -6,6 +6,7 @@
 package fiscalnest.core
 
 import java.math.BigDecimal
+import java.time.DateTimeException
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -53,6 +54,9 @@ internal object InputValidator {
         requireAmount(input.alreadySpent, "alreadySpent")
         require(input.forecastPeriods >= 1) {
             "forecastPeriods must be >= 1"
+        }
+        require(horizonFits(input.periodStart, input.periodEnd, input.forecastPeriods)) {
+            "Forecast horizon exceeds the supported date range"
         }
         input.incomeEvents.forEach(::validateIncomeEvent)
         input.expenseEvents.forEach(::validateExpenseEvent)
@@ -170,6 +174,16 @@ internal object InputValidator {
             "Period length must not exceed ${Int.MAX_VALUE} days"
         }
     }
+
+    private fun horizonFits(periodStart: LocalDate, periodEnd: LocalDate, forecastPeriods: Int): Boolean =
+        try {
+            PeriodSchedule(periodStart, periodEnd).period(forecastPeriods - 1)
+            true
+        } catch (_: DateTimeException) {
+            false
+        } catch (_: ArithmeticException) {
+            false
+        }
 
     private fun validateEventDates(startDate: LocalDate, endDate: LocalDate?) {
         require(endDate == null || startDate <= endDate) {

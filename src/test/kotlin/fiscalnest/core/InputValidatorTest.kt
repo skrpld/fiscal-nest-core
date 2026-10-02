@@ -189,4 +189,24 @@ class InputValidatorTest {
             forecast(periodStart = LocalDate.MIN, periodEnd = LocalDate.MAX, currentDate = LocalDate.MIN)
         }
     }
+
+    /**
+     * A horizon that runs past the last supported date is rejected instead of failing mid-calculation.
+     */
+    @Test
+    fun `rejects a horizon beyond the supported date range`() {
+        val lastMonthStart = LocalDate.MAX.withDayOfMonth(1)
+        assertDoesNotThrow { forecast(periodStart = lastMonthStart, periodEnd = LocalDate.MAX, currentDate = lastMonthStart) }
+        assertRejected("Forecast horizon exceeds the supported date range") {
+            forecast(periodStart = lastMonthStart, periodEnd = LocalDate.MAX, currentDate = lastMonthStart, forecastPeriods = 2)
+        }
+        assertRejected("Forecast horizon exceeds the supported date range") {
+            forecast(
+                periodStart = LocalDate.of(2026, 1, 1),
+                periodEnd = LocalDate.of(2026, 12, 31),
+                currentDate = LocalDate.of(2026, 1, 1),
+                forecastPeriods = Int.MAX_VALUE
+            )
+        }
+    }
 }
