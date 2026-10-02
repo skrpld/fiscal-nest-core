@@ -8,39 +8,26 @@ package fiscalnest.core
 import java.math.BigDecimal
 
 /**
- * Provides configurable decimal quantization.
+ * Quantizes decimals using the scales and rounding mode of an [EngineConfig].
  */
 internal object DecimalUtils {
     /**
-     * Quantizes a monetary value using the configured money scale and rounding mode.
+     * Quantizes a monetary value to [EngineConfig.moneyScale].
      *
      * @param value monetary value to quantize
      * @param config engine configuration
-     * @return quantized monetary value
+     * @return value with exactly `moneyScale` decimal places
      */
     fun quantizeMoney(value: BigDecimal, config: EngineConfig): BigDecimal =
         value.setScale(config.moneyScale, config.roundingMode)
 
     /**
-     * Quantizes a percentage value using the configured percentage scale and rounding mode.
+     * Quantizes a ratio on the `0.0..1.0` scale to [EngineConfig.percentageScale].
      *
-     * @param value percentage value to quantize
+     * @param value ratio to quantize
      * @param config engine configuration
-     * @return quantized percentage value
+     * @return value with exactly `percentageScale` decimal places
      */
     fun quantizePct(value: BigDecimal, config: EngineConfig): BigDecimal =
         value.setScale(config.percentageScale, config.roundingMode)
-
-    /**
-     * Requires a decimal value to be non-negative.
-     *
-     * @param value value to validate
-     * @param name logical field name
-     * @throws IllegalArgumentException if the value is negative
-     */
-    fun requireNonNegative(value: BigDecimal, name: String) {
-        require(value.signum() >= 0) {
-            "Amount must be non-negative: $name"
-        }
-    }
 }
