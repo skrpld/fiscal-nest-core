@@ -30,4 +30,16 @@ internal object DecimalUtils {
      */
     fun quantizePct(value: BigDecimal, config: EngineConfig): BigDecimal =
         value.setScale(config.percentageScale, config.roundingMode)
+
+    /**
+     * Divides a monetary value by a number of days and quantizes the quotient to
+     * [EngineConfig.moneyScale].
+     *
+     * @param value monetary value to divide
+     * @param days positive divisor
+     * @param config engine configuration
+     * @return per-day amount with exactly `moneyScale` decimal places
+     */
+    fun perDay(value: BigDecimal, days: Int, config: EngineConfig): BigDecimal =
+        value.divide(BigDecimal.valueOf(days.toLong()), config.moneyScale, config.roundingMode)
 }
