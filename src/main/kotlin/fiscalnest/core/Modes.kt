@@ -34,3 +34,26 @@ enum class PiggyBankMode {
      */
     FIXED_AMOUNT
 }
+
+/**
+ * An amount the forecast cash view sets aside from cash on hand, in addition to upcoming mandatory
+ * expenses, which are always reserved. Selected through [EngineConfig.cashReserves].
+ *
+ * @see CashFlow.mustReserve
+ */
+enum class CashReserve {
+    /**
+     * Reserve the period's planned [DistributionResult.cushionTopup].
+     */
+    CUSHION_TOPUP,
+
+    /**
+     * Reserve the period's planned [DistributionResult.piggyBankActual].
+     */
+    PIGGY_BANK,
+
+    /**
+     * Reserve optional expenses dated after the current date ([CashFlow.upcomingOptional]).
+     */
+    UPCOMING_OPTIONAL
+}

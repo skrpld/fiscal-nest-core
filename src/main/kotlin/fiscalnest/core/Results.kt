@@ -120,8 +120,11 @@ data class ForecastResult(
  * @property alreadySpent unscheduled spending so far; only the first period has any
  * @property liquidOnHand
  * `openingBalance + receivedIncome - paidMandatory - paidOptional - alreadySpent`
- * @property mustReserve `upcomingMandatory`
- * @property available `liquidOnHand - mustReserve`
+ * @property mustReserve [upcomingMandatory] plus every amount selected in
+ * [EngineConfig.cashReserves]: the planned cushion top-up, the planned piggy bank amount, and
+ * [upcomingOptional]
+ * @property available `liquidOnHand - mustReserve`: cash that can be spent now; negative when the
+ * reserves exceed the cash on hand, for example before payday
  */
 data class CashFlow(
     val receivedIncome: BigDecimal,
@@ -142,8 +145,8 @@ data class CashFlow(
  * @property dailyPlan `freeBalance / daysInPeriod`: even split of the period's free money
  * @property dailyActual `(freeBalance - alreadySpent) / daysRemaining`: free money still unspent
  * per remaining day
- * @property dailyCashflow `(available - cushionTopup) / daysRemaining`: conservative per-day amount
- * from cash on hand after reserving upcoming mandatory expenses and the cushion top-up
+ * @property dailyCashflow `available / daysRemaining`: per-day amount from cash on hand after the
+ * reserves selected in [EngineConfig.cashReserves]
  * @property burnRate `alreadySpent / (daysElapsed + 1)`: average unscheduled spending per day so
  * far, today included
  */

@@ -68,16 +68,16 @@ object BudgetCalculator {
                 currentDate = if (isFirst) input.currentDate else period.start,
                 incomeEvents = input.incomeEvents,
                 expenseEvents = input.expenseEvents
-            )
+            ).quantized(config)
             val alreadySpent = if (isFirst) DecimalUtils.quantizeMoney(input.alreadySpent, config) else zero
-            val cashFlow = cashFlow(snapshot, openingBalance, alreadySpent, config)
             val distribution = distributionEngine.distribute(
-                income = openingBalance.min(zero) + cashFlow.receivedIncome + cashFlow.pendingIncome,
-                mandatory = cashFlow.paidMandatory + cashFlow.upcomingMandatory,
-                optional = cashFlow.paidOptional + cashFlow.upcomingOptional,
+                income = openingBalance.min(zero) + snapshot.receivedIncome + snapshot.pendingIncome,
+                mandatory = snapshot.paidMandatory + snapshot.upcomingMandatory,
+                optional = snapshot.paidOptional + snapshot.upcomingOptional,
                 cushionState = cushionState,
                 config = config
             )
+            val cashFlow = cashFlow(snapshot, openingBalance, alreadySpent, distribution, config)
             val freeBalance = openingBalance.max(zero) + distribution.freeRemainder
             val closingBalance = freeBalance - alreadySpent
             results += ForecastResult(
@@ -92,7 +92,7 @@ object BudgetCalculator {
                 closingBalance = closingBalance,
                 distribution = distribution,
                 cashFlow = cashFlow,
-                dailyMetrics = dailyMetrics(snapshot, freeBalance, distribution, cashFlow, config)
+                dailyMetrics = dailyMetrics(snapshot, freeBalance, cashFlow, config)
             )
             openingBalance = closingBalance
             cushionState = CushionState(distribution.cushionCurrent, cushionState.target)
@@ -100,41 +100,55 @@ object BudgetCalculator {
         return results
     }
 
+    private fun PeriodSnapshot.quantized(config: EngineConfig): PeriodSnapshot = copy(
+        receivedIncome = DecimalUtils.quantizeMoney(receivedIncome, config),
+        pendingIncome = DecimalUtils.quantizeMoney(pendingIncome, config),
+        paidMandatory = DecimalUtils.quantizeMoney(paidMandatory, config),
+        upcomingMandatory = DecimalUtils.quantizeMoney(upcomingMandatory, config),
+        paidOptional = DecimalUtils.quantizeMoney(paidOptional, config),
+        upcomingOptional = DecimalUtils.quantizeMoney(upcomingOptional, config)
+    )
+
     private fun cashFlow(
         snapshot: PeriodSnapshot,
         openingBalance: BigDecimal,
         alreadySpent: BigDecimal,
+        distribution: DistributionResult,
         config: EngineConfig
     ): CashFlow {
-        val receivedIncome = DecimalUtils.quantizeMoney(snapshot.receivedIncome, config)
-        val paidMandatory = DecimalUtils.quantizeMoney(snapshot.paidMandatory, config)
-        val paidOptional = DecimalUtils.quantizeMoney(snapshot.paidOptional, config)
-        val upcomingMandatory = DecimalUtils.quantizeMoney(snapshot.upcomingMandatory, config)
-        val liquidOnHand = openingBalance + receivedIncome - paidMandatory - paidOptional - alreadySpent
+        val liquidOnHand = openingBalance + snapshot.receivedIncome - snapshot.paidMandatory -
+            snapshot.paidOptional - alreadySpent
+        val reserves = mapOf(
+            CashReserve.CUSHION_TOPUP to distribution.cushionTopup,
+            CashReserve.PIGGY_BANK to distribution.piggyBankActual,
+            CashReserve.UPCOMING_OPTIONAL to snapshot.upcomingOptional
+        )
+        val mustReserve = config.cashReserves.fold(snapshot.upcomingMandatory) { total, reserve ->
+            total + reserves.getValue(reserve)
+        }
         return CashFlow(
-            receivedIncome = receivedIncome,
-            pendingIncome = DecimalUtils.quantizeMoney(snapshot.pendingIncome, config),
-            paidMandatory = paidMandatory,
-            upcomingMandatory = upcomingMandatory,
-            paidOptional = paidOptional,
-            upcomingOptional = DecimalUtils.quantizeMoney(snapshot.upcomingOptional, config),
+            receivedIncome = snapshot.receivedIncome,
+            pendingIncome = snapshot.pendingIncome,
+            paidMandatory = snapshot.paidMandatory,
+            upcomingMandatory = snapshot.upcomingMandatory,
+            paidOptional = snapshot.paidOptional,
+            upcomingOptional = snapshot.upcomingOptional,
             alreadySpent = alreadySpent,
             liquidOnHand = liquidOnHand,
-            mustReserve = upcomingMandatory,
-            available = liquidOnHand - upcomingMandatory
+            mustReserve = mustReserve,
+            available = liquidOnHand - mustReserve
         )
     }
 
     private fun dailyMetrics(
         snapshot: PeriodSnapshot,
         freeBalance: BigDecimal,
-        distribution: DistributionResult,
         cashFlow: CashFlow,
         config: EngineConfig
     ): DailyMetrics = DailyMetrics(
         dailyPlan = DecimalUtils.perDay(freeBalance, snapshot.daysInPeriod, config),
         dailyActual = DecimalUtils.perDay(freeBalance - cashFlow.alreadySpent, snapshot.daysRemaining, config),
-        dailyCashflow = DecimalUtils.perDay(cashFlow.available - distribution.cushionTopup, snapshot.daysRemaining, config),
+        dailyCashflow = DecimalUtils.perDay(cashFlow.available, snapshot.daysRemaining, config),
         burnRate = DecimalUtils.perDay(cashFlow.alreadySpent, snapshot.daysElapsed + 1, config)
     )
 }
