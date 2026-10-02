@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 skrpld
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package fiscalnest.core
 
 import java.time.LocalDate

@@ -17,6 +17,13 @@
 ## Code Style Rules (Enforced in Every Step)
 
 - **No inline comments.** Code must be self-explanatory through naming and structure.
+- **License header is mandatory.** Every `.kt` file (main and test) starts with exactly this block, followed by one blank line and the `package` declaration. It is not a comment in the sense of these rules and must never be removed by cleanup or audit steps:
+  ```kotlin
+  /*
+   * Copyright 2026 skrpld
+   * SPDX-License-Identifier: Apache-2.0
+   */
+  ```
 - **No TODO / FIXME / HACK markers.**
 - **No Russian in code.** All identifiers, KDoc, and documentation are in English only.
 - **KDoc is mandatory** for every public class, function, and property. KDoc must explain the purpose, parameters (with units), return values, preconditions, and cross-references.
@@ -252,7 +259,7 @@ You are implementing Step 4 of the Fiscal Nest Core engine.
 6. Compute `daysRemaining = ChronoUnit.DAYS.between(currentDate, periodEnd) + 1` (inclusive; last day = 1).
 7. Validate that `currentDate` is within [periodStart, periodEnd] (delegate to InputValidator or inline).
 8. Do NOT compute daily metrics here. Only the snapshot.
-9. Do NOT add inline comments. Use KDoc for all declarations.
+9. Do NOT add inline comments. Use KDoc for all declarations. Start every new `.kt` file with the license header from the Code Style Rules of DEVELOPMENT_PLAN.md (`Copyright 2026 skrpld` + `SPDX-License-Identifier: Apache-2.0`).
 ```
 
 **Acceptance Criteria:**
@@ -320,7 +327,7 @@ You are implementing Step 5 of the Fiscal Nest Core engine.
 5. Return a fully populated `DistributionResult`.
 6. Use `DecimalUtils` for all quantizations.
 7. Do NOT reference any formatter, message, or string output.
-8. Do NOT add inline comments. Use KDoc for all declarations.
+8. Do NOT add inline comments. Use KDoc for all declarations. Start every new `.kt` file with the license header from the Code Style Rules of DEVELOPMENT_PLAN.md (`Copyright 2026 skrpld` + `SPDX-License-Identifier: Apache-2.0`).
 ```
 
 **Acceptance Criteria:**
@@ -392,7 +399,7 @@ You are implementing Step 6 of the Fiscal Nest Core engine.
    - Return the list of `ForecastResult`.
 4. Do NOT import or use any formatter classes.
 5. Do NOT produce any `String` output.
-6. Do NOT add inline comments. Use KDoc for all public declarations.
+6. Do NOT add inline comments. Use KDoc for all public declarations. Start every new `.kt` file with the license header from the Code Style Rules of DEVELOPMENT_PLAN.md (`Copyright 2026 skrpld` + `SPDX-License-Identifier: Apache-2.0`).
 ```
 
 **Acceptance Criteria:**
@@ -434,7 +441,7 @@ You are implementing Step 7 of the Fiscal Nest Core engine.
    - Any emoji or non-ASCII characters in string literals (exception messages must be plain ASCII English)
    - Any `String`-based crisis type mapping or human-readable message generation
    - Any `println` or `System.out` usage
-   - Any inline comments (keep only KDoc)
+   - Any inline comments (keep only KDoc and the Apache-2.0 license header at the top of each file)
 3. Ensure result classes contain **no `String` fields** except `activeCriticalityLevel` and opaque names (`id`, `name`, `category`).
 4. Ensure `internal` visibility is used for `DistributionEngine`, `CalendarEngine`, `DecimalUtils`, `InputValidator`.
 5. Ensure `BudgetCalculator` is the only `public` class/object intended for direct client use (data classes are also public by design).
@@ -448,7 +455,7 @@ You are implementing Step 7 of the Fiscal Nest Core engine.
 **Acceptance Criteria:**
 - Zero platform-specific imports.
 - Zero non-ASCII string literals in engine code.
-- Zero inline comments; only KDoc remains.
+- Zero inline comments; only KDoc and the license header remain.
 - Correct visibility modifiers (`public` for API, `internal` for implementation).
 - `README-CLIENT.md` is present and helpful.
 
@@ -482,7 +489,7 @@ You are implementing Step 8 of the Fiscal Nest Core engine.
    - Cross-references to related classes (e.g., `@see DistributionResult`).
 3. Review `internal` vs `public` visibility. Anything not part of the public API should be `internal`.
 4. Ensure no KDoc contains Russian, emojis, or implementation details that belong in code comments rather than API docs.
-5. Ensure there are NO inline comments anywhere in the code. KDoc only.
+5. Ensure there are NO inline comments anywhere in the code. KDoc only, plus the Apache-2.0 license header at the top of each file (never remove it).
 6. Update the main `README.md` with any corrections discovered during KDoc writing.
 ```
 
@@ -523,7 +530,7 @@ You are implementing Step 9 of the Fiscal Nest Core engine.
    - No hardcoded criticality levels.
    - No `String` fields in result classes (except opaque names and activeCriticalityLevel).
    - No formatter imports or usage.
-   - No inline comments (KDoc only).
+   - No inline comments (KDoc only); every file starts with the Apache-2.0 license header.
    - Correct Remainder Hierarchy computation.
    - Correct crisis flag logic (independent Booleans).
    - Correct piggy bank admissibility logic.
@@ -598,7 +605,7 @@ You are implementing Step 10 of the Fiscal Nest Core engine.
    - `dailyCashflow` uses `available`, not `freeRemainder`.
 5. All tests must use `BigDecimal` with `compareTo`, never `==` for doubles or float comparisons.
 6. Aim for 100% branch coverage of `DistributionEngine` and `CalendarEngine`.
-7. Do NOT add inline comments in test code. Use KDoc for test classes and methods.
+7. Do NOT add inline comments in test code. Use KDoc for test classes and methods. Start every new `.kt` file with the license header from the Code Style Rules of DEVELOPMENT_PLAN.md (`Copyright 2026 skrpld` + `SPDX-License-Identifier: Apache-2.0`).
 8. Save tests under `src/test/kotlin/fiscalnest/core/`.
 9. Produce `TEST_REPORT.md` summarizing:
    - Total test count.

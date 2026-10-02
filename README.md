@@ -2,7 +2,7 @@
 
 > **Repository:** `github.com/skrpld/fiscal-nest-core`  
 > **Package:** `fiscalnest.core`  
-> **License:** BSD-3-Clause (repository-level)  
+> **License:** Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE)  
 > **Language:** English only — code, APIs, KDoc, docs  
 > **Scope:** Stateless Kotlin business-logic engine. No UI, no DB, no formatting.
 
@@ -219,6 +219,7 @@ fiscal-nest-core/
     DEVELOPMENT_PLAN.md
   README.md
   LICENSE
+  NOTICE
 ```
 
 ---
@@ -258,6 +259,18 @@ The engine is **stateless and thread-safe**. All public methods are pure functio
 
 **Spec v1.0 is LOCKED.**  
 All code must comply with the documents above. Any deviation is treated as a bug.
+
+---
+
+## License
+
+Copyright 2026 skrpld
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this project except in compliance with the License. You may obtain a copy of the License in [LICENSE](LICENSE) or at <https://www.apache.org/licenses/LICENSE-2.0>.
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+Redistributions must keep the [NOTICE](NOTICE) file, as required by Section 4(d) of the License.
 
 ---
 
