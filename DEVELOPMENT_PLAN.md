@@ -4,6 +4,26 @@
 
 ---
 
+## Progress
+
+| Step | Status |
+|------|--------|
+| 0 — Kick-off | Done |
+| 1 — Locked spec | Done; amended to v1.1 (see `FISCAL_NEST_CORE_LOCKED.md` §0.2) |
+| 2 — Data model | Done |
+| 3 — Decimal & input layer | Done |
+| 4 — Calendar engine | Done |
+| 5 — Distribution engine | Done |
+| 6 — Calculator API | Done |
+| 7 — Cleanup & client separation | Open: `README-CLIENT.md` not written yet; code already passes the cleanup checks |
+| 8 — KDoc & documentation | Open: KDoc is present on every public declaration; a dedicated review pass is pending |
+| 9 — Final audit | Open: `AUDIT_REPORT.md` and `SAMPLE_USAGE.kt` not written yet |
+| 10 — Unit tests | Done: Gradle build with JUnit Jupiter, tests under `src/test/kotlin` |
+
+The prompts of completed steps are kept for history. Where they differ from `FISCAL_NEST_CORE_LOCKED.md` v1.1 (plan vs cash split, removed fields, carry-forward of `alreadySpent`), the locked spec wins.
+
+---
+
 ## How to Use This Plan
 
 1. Start a **new chat** for each step.
@@ -306,7 +326,7 @@ You are implementing Step 5 of the Fiscal Nest Core engine.
    - `netRemainder = rawRemainder - optional`
    - If `netRemainder < 0`: set `expenseCrisis = true`, `expenseDeficit = |netRemainder|`, cushionTopup = 0, piggy = 0, freeRemainder = netRemainder. Return immediately.
 3. If no Expense Crisis:
-   - Compute `fillPct = cushionCurrent / cushionTarget * 100` (handle target = 0 as 100%).
+   - Compute `fillPct = cushionCurrent / cushionTarget` as a ratio on the `0.0-1.0` scale (handle target = 0 as `1`). Never use the `0-100` scale in calculations; it is a client display concern.
    - Compute `cushionNeed = max(0, target - current)`.
    - Select active criticality level: first level where `fillPct < maxFillPct`. If none, cushion is fully funded.
    - If active level exists:

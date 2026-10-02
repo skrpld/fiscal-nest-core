@@ -1,6 +1,6 @@
 # Architecture
 
-> Source of truth for entities, algorithms, business rules, and runtime characteristics.
+> Entities, algorithms, business rules, and runtime characteristics. Aligned with `FISCAL_NEST_CORE_LOCKED.md` v1.1, which prevails on any conflict.
 
 ---
 
@@ -36,16 +36,10 @@ A stateless entry-point object that orchestrates the engine. It exposes two publ
 The facade delegates to `InputValidator`, `CalendarEngine`, and `DistributionEngine`. It is the **only** public class intended for direct client use.
 
 ### 1.7 Numeric Precision (`DecimalUtils`)
-A stateless utility object that performs all `BigDecimal` quantization. It accepts an `EngineConfig` to obtain the required `scale` and `roundingMode`. Every monetary intermediate result is quantized before being stored in a result object. This guarantees deterministic, repeatable calculations.
+A stateless utility object that performs all `BigDecimal` quantization. It accepts an `EngineConfig` to obtain the required `scale` and `roundingMode`. Monetary inputs are quantized to `moneyScale` on entry and every allocation is quantized when it is decided, so the remainder hierarchy adds up exactly. Ratios are compared unrounded and only quantized to `percentageScale` when reported. This guarantees deterministic, repeatable calculations.
 
 ### 1.8 Input Validation (`InputValidator`)
-A stateless utility object that validates all public inputs before they reach the calculation core. It checks:
-- Non-negative and finite monetary values.
-- Percentages in the closed range `[0, 1]`.
-- `criticalityLevels` is non-empty, sorted by `maxFillPct` ascending, and has non-overlapping ranges.
-- Date consistency (`periodStart <= periodEnd`, `currentDate` within the period, `forecastPeriods >= 1`).
-
-On failure it throws `IllegalArgumentException` with a descriptive message.
+The single implementation of every validation rule (see §7). Data class constructors call it, so invalid instances cannot be built, and `BudgetCalculator` calls it again before every calculation, because reflection-based deserializers can create instances without running a constructor. On failure it throws `IllegalArgumentException` with a descriptive message.
 
 ---
 
@@ -71,7 +65,7 @@ Post-Cushion Remainder
   = Free Remainder      <- source for daily budget calculations
 ```
 
-All values are `BigDecimal`. All subtractions are exact; quantization is applied only when a value is stored in a result object.
+All values are `BigDecimal`. Inputs are quantized to `moneyScale`, each allocation (cushion top-up, piggy bank) is quantized when decided, and all subtractions are exact, so `Net Remainder = Cushion Top-up + Piggy Bank + Free Remainder` holds to the last unit.
 
 ---
 
@@ -171,51 +165,60 @@ If `cushionCurrent > cushionTarget`, the cushion is overfilled. Top-up is suspen
 ## 6. Calendar Logic (FORECAST Mode)
 
 ### 6.1 Period
-A contiguous date range defined by `periodStart` and `periodEnd` (inclusive). The first period is supplied by the client via `ForecastInput`. Subsequent periods are generated automatically as contiguous blocks of the **same length**:
-```
-nextPeriodStart = previousPeriodEnd + 1 day
-nextPeriodEnd   = nextPeriodStart + (periodEnd - periodStart)
-```
+A contiguous date range defined by `periodStart` and `periodEnd` (inclusive). The first period is supplied by the client via `ForecastInput`. Subsequent periods are generated automatically:
+
+- **Calendar months.** If the first period spans a whole number of months `m` (`periodStart + m months == periodEnd + 1 day`), period `k` is `[periodStart + k*m months, periodStart + (k+1)*m months - 1 day]`. August 1–31 is followed by September 1–30 and October 1–31; a 5th-to-4th pay cycle stays on the 5th; `m = 3` gives quarters.
+- **Fixed length.** Otherwise every period has the first period's length in days (e.g. two-week periods).
 
 ### 6.2 Event Recurrence
-Events support three recurrence patterns, modeled as a sealed class:
-- `OneTime(date)` — single occurrence on a specific date.
-- `EveryNDays(n, startDate)` — repeats every N calendar days from `startDate`.
-- `EveryNMonths(n, dayOfMonth, startDate)` — repeats every N calendar months on the specified `dayOfMonth`. If the target day does not exist in a month (e.g., 31st of February), the date is coerced to the last day of that month.
+Every pattern is anchored at the event's `startDate` and limited to `[startDate, endDate]`:
+- `OneTime` — single occurrence on `startDate`.
+- `EveryNDays(n)` — `startDate`, then every `n` calendar days.
+- `EveryNMonths(n, dayOfMonth)` — the first `dayOfMonth` on or after `startDate`, then every `n` months. If the day does not exist in a month (e.g. the 31st in February), the date is coerced to the last day of that month.
 
-### 6.3 Snapshot (`PeriodSnapshot`)
+Occurrences are counted arithmetically, so an event anchored decades in the past costs the same as one starting today.
+
+### 6.3 Snapshot (`PeriodSnapshot`, internal)
 For a given `currentDate` inside the period:
 - `daysInPeriod` — total days in the period (`ChronoUnit.DAYS.between(periodStart, periodEnd) + 1`).
 - `daysElapsed` — days from `periodStart` to `currentDate` (exclusive, i.e. `between(start, current)`).
 - `daysRemaining` — days from `currentDate` to `periodEnd` **inclusive**. On the last day, `daysRemaining = 1`.
-- `receivedIncome` — sum of income events with date <= `currentDate`.
-- `pendingIncome` — sum of income events with date > `currentDate`.
-- `upcomingMandatory` — sum of mandatory expense events with date > `currentDate`.
-- `upcomingOptional` — sum of optional expense events with date > `currentDate`.
+- `receivedIncome` / `pendingIncome` — income occurrences dated `<= currentDate` / `> currentDate`.
+- `paidMandatory` / `upcomingMandatory` — mandatory expense occurrences dated `<= currentDate` / `> currentDate`.
+- `paidOptional` / `upcomingOptional` — optional expense occurrences dated `<= currentDate` / `> currentDate`.
 
-### 6.4 Liquidity (Forecast-Only)
-Liquidity metrics are computed by `BudgetCalculator` **after** `CalendarEngine` produces the snapshot and **before** daily metrics are derived. They are **not** passed into `DistributionEngine`.
+### 6.4 Plan and Cash: two views of one period
+Every forecast period is calculated twice, and each view treats income and expenses **symmetrically**:
+
+| View | Field | Income | Expenses | Answers |
+|------|-------|--------|----------|---------|
+| **Plan** | `ForecastResult.distribution` | all income of the period + opening balance | all expenses of the period | How should this period's money be allocated? Same rules as WHAT_IF. |
+| **Cash** | `ForecastResult.cashFlow` | received by `currentDate` | paid by `currentDate`; upcoming mandatory reserved | What is safe to spend right now? |
+
+A salary that arrives after the rent is therefore not an expense crisis in the plan, while the cash view still shows the gap until payday (`available` may be negative).
 
 ```
-liquidOnHand = receivedIncome + openingBalance - alreadySpent
+liquidOnHand = openingBalance + receivedIncome - paidMandatory - paidOptional - alreadySpent
 mustReserve  = upcomingMandatory
 available    = liquidOnHand - mustReserve
 ```
 
-- `alreadySpent` is taken from `ForecastInput` for the **first period only**. For all subsequent periods `alreadySpent = 0` because they are fully in the future.
-- `openingBalance` is `0` for the first period; for period N > 1 it equals the `closingBalance` (free remainder) of period N-1.
+- `alreadySpent` is **unscheduled** spending (not covered by expense events), taken from `ForecastInput` for the **first period only**. Later periods are fully in the future, so it is `0`.
+- Liquidity is computed by `BudgetCalculator`; it is **not** passed into `DistributionEngine`.
 
 ### 6.5 Multi-Period Forecast
-The engine accepts a forecast horizon (`forecastPeriods`). It builds a chain of consecutive periods, updates state between periods, and returns a list of period results.
+The engine accepts a forecast horizon (`forecastPeriods`). It builds the chain of periods, carries state between them, and returns one result per period.
 
 **Carry-forward rules:**
-1. **Opening Balance:** Period 1 has `openingBalance = 0`. Period N (N > 1) has `openingBalance = closingBalance` of period N-1 = `freeRemainder` of period N-1.
-2. **Cushion State:** The `cushionState.current` is carried forward. After each period: `nextCushionCurrent = cushionCurrent(post-distribution) = cushionCurrent(input) + cushionTopup`.
+1. **Opening Balance:** Period 1 has `openingBalance = 0`. Period N (N > 1) has `openingBalance = closingBalance` of period N-1, where `closingBalance = freeRemainder - alreadySpent`. A negative value carries a deficit into the next plan.
+2. **Cushion State:** After each period: `nextCushionCurrent = cushionCurrent(post-distribution) = cushionCurrent(input) + cushionTopup`.
 3. **Already Spent:** Applies only to period 1. For N > 1, `alreadySpent = 0` and `currentDate = periodStart`, therefore `daysElapsed = 0` and `daysRemaining = daysInPeriod`.
-4. **Income for Distribution:** The `income` passed to `DistributionEngine` for period N is `snapshot.receivedIncome + openingBalance`.
+4. **Income for Distribution:** `openingBalance + receivedIncome + pendingIncome` of the period.
+
+> Future periods assume no unscheduled spending, so unspent free remainder accumulates from period to period. The projection shows the most that can be carried forward, not a spending forecast.
 
 **Forecast Result Composition:**
-`ForecastResult` does **not** inherit from `DistributionResult`. It **contains** a `DistributionResult` plus daily metrics, period boundaries, liquidity values, and balance carry-forward fields. This avoids data-class inheritance issues in Kotlin and keeps the hierarchy flat and explicit.
+`ForecastResult` does **not** inherit from `DistributionResult`. It **contains** a `DistributionResult` (plan), a `CashFlow` (cash view), daily metrics, period boundaries and balance carry-forward fields.
 
 ---
 
@@ -224,14 +227,15 @@ The engine accepts a forecast horizon (`forecastPeriods`). It builds a chain of 
 The engine uses **fail-fast** validation. All public entry points validate inputs before any calculation begins.
 
 ### 7.1 Validation Rules
-- Monetary amounts must be non-negative and finite (`!isInfinite()`).
-- Percentages (`admissibilityPct`, `topupValue`, `piggyBankTarget` when in percent mode, `piggyBankAdmissibilityPct`) must be in `[0, 1]`.
-- `moneyScale` and `percentageScale` must be `>= 0`.
-- `criticalityLevels` must be non-empty, sorted by `maxFillPct` ascending, and ranges must not overlap.
-- `periodStart` must not be after `periodEnd`.
+- Monetary amounts must be non-negative. Any decimal input may have at most 1000 integer and 1000 fractional digits (protects against values like `1E+999999999` that would exhaust memory when quantized).
+- Ratios (`topupValue`, `admissibilityPct`, `piggyBankTarget` in percent mode, `piggyBankAdmissibilityPct`) must be in `[0, 1]`; `maxFillPct` in `(0, 1]`.
+- `moneyScale` and `percentageScale` must be in `0..1000`.
+- `criticalityLevels` must be non-empty, sorted by `maxFillPct` ascending, without two equal `maxFillPct` values (compared by value, so `0.3` equals `0.30`).
+- `periodStart` must not be after `periodEnd`; the period must not be longer than `Int.MAX_VALUE` days.
 - `currentDate` must be within `[periodStart, periodEnd]`.
-- `forecastPeriods` must be `>= 1`.
-- Recurrence parameters (`n` in EveryNDays/EveryNMonths, `dayOfMonth`) must be positive.
+- `forecastPeriods` must be `>= 1`, and the last period must stay within the `LocalDate` range.
+- Recurrence: `n >= 1`; `dayOfMonth` in `1..31`.
+- Events: `startDate` must not be after `endDate`.
 
 ### 7.2 Exception Policy
 - `IllegalArgumentException` is thrown for every validation failure.
